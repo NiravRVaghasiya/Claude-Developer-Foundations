@@ -120,4 +120,3 @@ See [DEPLOY.md](./DEPLOY.md) for step-by-step instructions to push to GitHub and
 ## Source Notes
 
 The topic content is derived from the two study-note files in the repository root (`CCDV-F Study Notes.md` and `CCDV-F Study Notes2.md`), which are kept as the source of record. This is original study material — not reproduced exam content.
-# Claude-Developer-Foundations
