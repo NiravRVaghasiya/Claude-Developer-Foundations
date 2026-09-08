@@ -1,0 +1,99 @@
+## Core Concept
+
+Streaming sends the response back **incrementally as Server-Sent Events (SSE)** instead of one final blob. You get a sequence of typed events; text arrives in `content_block_delta` chunks that you **accumulate**. It dramatically improves **perceived latency (TTFB)** for interactive UIs but adds client complexity.
+
+## Annotated Code
+
+```python
+# The SDK's stream helper handles SSE parsing for you.
+with client.messages.stream(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Write a haiku about latency."}]
+) as stream:
+    for text in stream.text_stream:      # yields incremental text deltas
+        print(text, end="", flush=True)  # render token-by-token in the UI
+
+    final = stream.get_final_message()   # full assembled Message once done
+    print("\n", final.stop_reason, final.usage.output_tokens)
+```
+
+```python
+# Lower-level: handling raw events yourself.
+with client.messages.stream(model="claude-sonnet-4-5", max_tokens=1024,
+                            messages=[{"role":"user","content":"Hi"}]) as stream:
+    buffer = ""
+    for event in stream:
+        if event.type == "content_block_delta":
+            buffer += event.delta.text   # ← DELTA ACCUMULATION: append each chunk
+        elif event.type == "message_stop":
+            break
+    # buffer now holds the full text
+```
+
+## SSE event sequence (order matters)
+
+```text
+message_start              ← empty Message shell (role, model, usage stub)
+  content_block_start      ← a block begins (type: text OR type: tool_use)
+    content_block_delta    ← incremental piece (text_delta, or input_json_delta for tools)
+    content_block_delta    ← ...many of these...
+  content_block_stop       ← this block finished
+message_delta              ← top-level updates: stop_reason, final usage
+message_stop               ← stream complete
+[ping]                     ← keep-alive events may appear anytime; ignore them
+```
+
+<Callout type="tip" title="Streaming tool calls">
+For **tool use over streaming**, the tool's JSON arguments arrive as `input_json_delta` chunks that you concatenate into a JSON string, then parse at `content_block_stop`. Don't try to parse partial JSON mid-stream.
+</Callout>
+
+## When (and when not) to stream
+
+| Use streaming when… | Avoid streaming when… |
+|---|---|
+| Interactive chat UI — user watches text appear | Batch/offline jobs (use **batch API** for ~50% cost cut) |
+| Long outputs where TTFB perception matters | You need the whole result before acting (e.g. strict JSON parse) |
+| Reducing "is it frozen?" abandonment | Simple, short, non-interactive calls |
+
+## Mental Model
+
+Non-streaming is a **letter that arrives finished**. Streaming is a **phone call** — words arrive as they're spoken, so it *feels* instant, but you have to **listen and transcribe continuously** (accumulate deltas) and reassemble the full sentence yourself. The `message_stop` event is the other person hanging up.
+
+## Common Traps
+
+<Callout type="trap" title="Streaming lowers total latency">
+**Misconception:** Streaming makes the model generate faster / lowers total latency.
+**Reality:** It improves PERCEIVED latency (time-to-first-token). Total generation time is roughly the same; you just see output sooner.
+</Callout>
+
+<Callout type="trap" title="Stream a bulk job to save money">
+**Misconception:** Use streaming for a nightly bulk-processing job to save money/time.
+**Reality:** Non-interactive bulk work should use the BATCH API (~50% cheaper). Streaming is for interactive UX, not throughput or cost.
+</Callout>
+
+## Exam Tips
+
+- "Benefit of streaming" → **TTFB / perceived latency & UX**, never "faster total" or "cheaper."
+- Throughput/cost/offline → **batch**, not streaming. This swap is a favorite distractor.
+- Know the event order: `message_start` → blocks (`start`/`delta`/`stop`) → `message_delta` → `message_stop`.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario 1: The 'Is It Frozen?' Chat UI" prompt="A chat app shows a spinner for 8 seconds on long answers; users abandon, thinking it hung. How do you improve responsiveness without a faster model?">
+**Wrong approach:** Switch to Opus "for speed" (it's slower) or crank `max_tokens` down and truncate answers.
+
+**Correct approach:** Stream the response; render `content_block_delta` text as it arrives so the first words appear in under a second. Same total time, far better perceived UX.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario 2: The Overnight Batch Job" prompt="A pipeline must summarize 200k documents nightly. Cost is the top concern; no user is watching. How do you minimize spend?">
+**Wrong approach:** Stream each call to "handle them faster." Streaming gives no cost benefit and no user sees the tokens.
+
+**Correct approach:** Use the Message Batches API (~50% discount, async). Streaming is irrelevant when nothing interactive consumes the tokens.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="Which event carries incremental text, and does streaming reduce total or perceived latency?">
+`content_block_delta` (with a `text_delta`) carries incremental text — you accumulate each into a buffer. Streaming reduces **perceived** latency (TTFB); total generation time is roughly the same.
+</RevealAnswer>

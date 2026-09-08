@@ -1,0 +1,67 @@
+## Core Concept
+
+**Model migration** is moving a production workload from one Claude version to another (e.g., Sonnet 4.5 → Sonnet 5). Prompts tuned for the old model don't automatically behave identically on the new one — **tokenization, defaults, formatting behavior, and refusal boundaries can shift**. The safe path is a **compatibility checklist → behavioral testing → canary/shadow rollout → monitored ramp → fast rollback**, with **model versions pinned** for reproducibility. Never flip 100% of traffic in one step.
+
+## Key Facts & Mechanics
+
+- **Prompt compatibility checklist across versions:**
+  - **Recount tokens** on the target model (4.7+/Fable/Mythos ≈ **+30%** tokens) — re-check context-window fit and cost.
+  - **Prefill:** Claude **4.6+** and Mythos Preview **do not support** assistant-message prefill → a prefilled last assistant turn returns `400`. Replace with **structured outputs** / `output_config.format` / system-prompt instructions.
+  - **Thinking blocks** must be passed back **unmodified** with tool use, or you get a `400`.
+  - Re-verify **caching minimums** (differ by tier) and **stop_sequences** behavior.
+- **Behavioral differences to test:** output formatting/verbosity, tool-selection tendencies, refusal thresholds, latency, structured-output adherence, cost per request.
+- **Shadow:** send a *copy* of live traffic to the new model **without serving its output** — compare offline. Zero user risk.
+- **Canary:** route a **small % of real traffic** (e.g., 1% → 5% → 25% → 100%) to the new model, watching quality/error/cost before widening.
+- **Rollback triggers:** spikes in error rate (esp. `400`s from prefill/thinking incompatibility), quality regressions on your eval set, latency/cost blowouts, or increased refusals → **revert to the pinned old version immediately**.
+- **Versioning:** **pin** explicit model IDs in production for **reproducibility**; only **float** to an alias in dev/experimentation. Keep an **eval suite** to re-run on any candidate.
+
+## Annotated Code
+
+```python
+# Canary migration with a pinned version + fast rollback.
+import random
+OLD = "claude-sonnet-4-5"      # pinned for reproducibility
+NEW = "claude-sonnet-5"
+CANARY_PCT = 0.05              # start at 5%, widen only if metrics hold
+
+def choose_model():
+    return NEW if random.random() < CANARY_PCT else OLD
+
+model = choose_model()
+try:
+    resp = client.messages.create(model=model, max_tokens=1024, messages=msgs)
+    log_metrics(model, resp)                 # track quality, latency, cost, refusals
+except anthropic.BadRequestError as e:       # 400: e.g. prefill/thinking incompatibility on NEW
+    if model == NEW:
+        resp = client.messages.create(model=OLD, max_tokens=1024, messages=msgs)  # rollback
+```
+
+## Mental Model
+
+Migrating models is **swapping the engine in a car that's still driving customers around**. You don't yank the old engine and hope — you first **bench-test the new one** (compatibility checklist), run it on a **dyno while the real engine still drives** (shadow), then put it in **one loaner car out of twenty** (canary) and watch the dashboard. If a warning light flashes (rollback trigger), you drop the **old, VIN-stamped engine** (pinned version) back in instantly.
+
+## Common Traps
+
+<Callout type="trap" title="New model = drop-in replacement">
+**Trap:** "No testing needed." Tokenization (+30%), **prefill removal (4.6+)**, thinking-block rules, and behavioral shifts can break prompts. Always run the compatibility checklist + evals.
+</Callout>
+
+<Callout type="trap" title="Floating aliases in production">
+**Trap:** Great for dev, bad for prod — an alias silently changing under you **destroys reproducibility**. **Pin** explicit versions in prod.
+</Callout>
+
+<Callout type="trap" title="Big-bang 100% cutover">
+**Trap:** The exam-correct rollout is **shadow → canary → gradual ramp** with monitoring, not flipping all traffic at once.
+</Callout>
+
+## Scenario Challenge
+
+<RevealAnswer title="Scenario: Prefill Migration to 4.6+" prompt="You migrate a prompt that prefills the assistant's reply ('Sure! Here's the JSON: {') from Sonnet 4.5 to a Claude 4.6+ model, with a big-bang cutover. What happens?">
+Every request **fails with `400 invalid_request_error`** — "This model does not support assistant message prefill." A big-bang cutover turns that into a **full outage**. **Fix:** catch it in the compatibility checklist first; replace prefill with **structured outputs / `output_config.format` / system-prompt guidance**, validate on a canary, and keep the pinned old version ready for rollback.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="What's the safe rollout order for a model migration, and why pin versions?">
+Shadow (mirror traffic, don't serve) → canary (small % real traffic) → gradual ramp → 100%, with fast rollback to a PINNED version. Pinning = reproducibility; floating aliases break it in prod.
+</RevealAnswer>

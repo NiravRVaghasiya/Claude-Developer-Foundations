@@ -1,0 +1,94 @@
+## Core Concept
+
+Choosing a model is a **cost/latency/capability trade-off**, not a "pick the biggest" decision. **Haiku** = fastest/cheapest for simple, high-volume tasks; **Sonnet** = balanced workhorse for most production work; **Opus** = deepest reasoning for genuinely hard tasks. Match the model to the requirement — over-provisioning is penalized on the exam.
+
+## Annotated Code
+
+```python
+# Exact model ID strings — format: claude-<family>-<version>  (pin for reproducibility)
+MODELS = {
+    "opus":   "claude-opus-4-5",     # deepest reasoning; highest cost/latency
+    "sonnet": "claude-sonnet-4-5",   # balanced default for most production tasks
+    "haiku":  "claude-haiku-4-5",    # fastest, cheapest; simple/high-volume tasks
+}
+# ⚠️ "claude-sonnet-latest" style aliases FLOAT to the newest version — convenient,
+#    but NOT reproducible. Pin an exact dated/versioned ID when stability matters.
+
+response = client.messages.create(
+    model=MODELS["haiku"],           # a routing/classification task → cheap model
+    max_tokens=256,                  # cap OUTPUT length (cost + truncation control)
+    temperature=0.0,                 # 0 = deterministic/factual; higher = more creative
+    top_p=0.9,                       # nucleus sampling; DON'T tune alongside temperature
+    stop_sequences=["\n\nUSER:"],    # hard stop when this string is generated
+    messages=[{"role": "user", "content": "Classify: 'refund my order' -> intent?"}]
+)
+```
+
+## Key parameters
+
+| Parameter | Controls | Notes / traps |
+|---|---|---|
+| `max_tokens` | Max **output** tokens | **Required**; caps output only; hitting it → `stop_reason: max_tokens` (truncation) |
+| `temperature` | Randomness (0–1) | 0 ≈ deterministic; higher = more varied/creative |
+| `top_p` | Nucleus sampling cutoff | **Tune temperature *or* top_p, not both** |
+| `stop_sequences` | Custom stop strings | Generation halts when one is produced; check `stop_sequence` field |
+
+## Choosing the right model
+
+```text
+Simple/high-volume (classification, routing, extraction, short replies)?
+   → Haiku (cheapest, fastest)
+Standard production work (chat, summarization, tool use, coding help)?
+   → Sonnet (balanced default)
+Deep multi-step reasoning / hardest problems, latency & cost secondary?
+   → Opus
+Rule of thumb: start at Sonnet; drop to Haiku if it meets quality at lower cost;
+               escalate to Opus only when Sonnet demonstrably falls short.
+```
+
+<Callout type="tip" title="Cost levers beyond model choice">
+**Prompt caching** (reuse a large static system prompt cheaply) and the **batch API** (~50% off, async) often matter more than which model you pick.
+</Callout>
+
+## Mental Model
+
+Models are **vehicles**. Haiku is a **scooter** — nimble, cheap, perfect for quick errands. Sonnet is a **reliable sedan** — handles almost everything daily. Opus is a **freight truck** — immense capability, but slow and expensive. Picking Opus for a classification task is renting a semi to fetch groceries.
+
+## Common Traps
+
+<Callout type="trap" title="Always use the most powerful model">
+**Misconception:** For best results, always use Opus.
+**Reality:** Match model to requirement. Opus is slower and far costlier; Sonnet or Haiku often meet the bar. Over-provisioning is a graded mistake — watch for tight latency/cost budgets where the "Opus" option is the trap.
+</Callout>
+
+<Callout type="trap" title="Use a 'latest' alias in production">
+**Misconception:** Use a 'latest' model alias in production so you always get improvements.
+**Reality:** Aliases FLOAT — behavior can change without warning, breaking reproducibility. Pin an exact version when stability/reproducibility matters.
+</Callout>
+
+## Exam Tips
+
+- See a tight **latency or cost budget**? The **biggest-model** answer is usually the trap. Pick the smallest model that meets the requirement.
+- "Reproducible / stable production" → **pin** the version. "Always get the newest" → alias (float).
+- `max_tokens` is **required** and caps **output** — any option implying otherwise is wrong.
+- Before "use a bigger model," consider **caching** and **batch** for cost, and **fast mode** for latency.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario 1: The Over-Powered Classifier" prompt="A team routes millions of support tickets by intent using Opus. The bill is enormous and p95 latency is too high for the SLA. How do you cut cost and latency without hurting routing accuracy?">
+**Wrong approach:** Keep Opus and "optimize the prompt" for speed. The model choice is the cost/latency driver, not the prompt.
+
+**Correct approach:** Move to Haiku (a classification task Haiku handles well), pin the version, and cache the static system prompt. Massive cost/latency win.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario 2: The Drifting Pipeline" prompt="A regulated data-extraction pipeline suddenly produces subtly different outputs one morning; nothing in the code changed. How do you guarantee reproducible model behavior?">
+**Wrong approach:** Blame temperature and set it to 0 only. Helps determinism but doesn't explain the drift.
+
+**Correct approach:** Root cause: a floating 'latest' alias rolled to a new model version. Pin an exact versioned model ID so behavior is stable and auditable.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="A high-volume intent-classification endpoint needs low cost and low latency. Which model, and why not tune temperature and top_p together?">
+**Haiku** — cheapest and fastest, and classification doesn't need Opus-level reasoning. Don't tune `temperature` and `top_p` together: they both control randomness via overlapping mechanisms, making output behavior unpredictable. Change one.
+</RevealAnswer>

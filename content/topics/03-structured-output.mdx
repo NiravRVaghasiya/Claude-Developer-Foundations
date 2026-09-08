@@ -1,0 +1,100 @@
+## Core Concept
+
+Structured output means getting Claude to return data in a **reliable, machine-parseable shape** (usually JSON). The most robust techniques are **prefilling** the `assistant` turn with the opening `{`, giving an explicit **schema/example** in the system prompt, and — most reliable of all — using a **tool with an `input_schema`** so the JSON is validated against a contract.
+
+## Annotated Code
+
+```python
+# TECHNIQUE A — Prefill: force Claude to start its reply mid-JSON.
+response = client.messages.create(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    system="You extract structured data. Respond ONLY with valid JSON, no prose.",
+    messages=[
+        {"role": "user", "content": "Extract name, role, company: 'Nirav, an ML engineer at Acme.'"},
+        {"role": "assistant", "content": "{"}   # ← PREFILL: Claude continues from the '{'
+    ],
+    stop_sequences=["}"]                          # optional: stop right after the object
+)
+json_text = "{" + response.content[0].text        # you re-attach the prefilled '{'
+# ⚠️ If you use stop_sequences=["}"], re-append "}" too before parsing.
+```
+
+```python
+# TECHNIQUE B — Tool as a schema enforcer (MOST RELIABLE for strict structure).
+extract_tool = {
+    "name": "record_person",
+    "description": "Record the extracted person fields.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "name":    {"type": "string"},
+            "role":    {"type": "string"},
+            "company": {"type": "string"}
+        },
+        "required": ["name", "role", "company"]
+    }
+}
+resp = client.messages.create(
+    model="claude-sonnet-4-5", max_tokens=1024,
+    tools=[extract_tool],
+    tool_choice={"type": "tool", "name": "record_person"},  # FORCE the schema
+    messages=[{"role": "user", "content": "Nirav, an ML engineer at Acme."}]
+)
+data = next(b.input for b in resp.content if b.type == "tool_use")  # already a dict!
+# data == {"name": "Nirav", "role": "ML engineer", "company": "Acme"}
+```
+
+<Callout type="tip" title="Why Technique B wins">
+The `input` of a `tool_use` block is **already parsed against your JSON Schema** — no fragile string parsing, no stray markdown fences. This is the exam's favored "reliable structured output" answer.
+</Callout>
+
+## Extraction patterns
+
+| Pattern | What it does | Technique |
+|---|---|---|
+| **Named entity** | Pull people/orgs/dates from text | Tool schema with typed fields |
+| **Classification** | Assign a label from a fixed set | `enum` in schema, or prefill + `stop_sequences` |
+| **Transformation** | Reshape data (e.g. prose → table rows) | Tool schema with array of objects |
+
+## Mental Model
+
+Asking for JSON in plain prose is like asking a chef for "something with chicken" — you get *something*, but shape varies. A **tool `input_schema` is a fill-in-the-blank form**: the chef must return exactly the fields you printed on the form, in the right types. Prefilling the `{` is **handing them the form already opened to page one**.
+
+## Common Traps
+
+<Callout type="trap" title="Prompt-only JSON is enough">
+**Misconception:** Just say "return JSON" in the prompt — that's enough for production.
+**Reality:** Prompt-only JSON is the LEAST reliable method; the model can wrap it in prose or markdown fences. Use a tool `input_schema` (or prefill) for reliability. "Most RELIABLE way to guarantee JSON shape" → the tool-schema option wins.
+</Callout>
+
+<Callout type="trap" title="Prefill is echoed back">
+**Misconception:** After prefilling assistant with `{`, `response.content` already includes it.
+**Reality:** The prefill text is NOT echoed back. You must re-attach `{` before `json.loads()` (and re-append `}` if you stopped on it).
+</Callout>
+
+## Exam Tips
+
+- "Most reliable / production-grade structured output" → **tool `input_schema`**, not prompt wording.
+- Prefilling is a legit, cheaper technique — but remember the **prefix re-attachment** gotcha.
+- Markdown code-fence wrapping is a common failure mode; strip fences or use a tool.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario 1: The Markdown-Wrapped JSON" prompt="An extraction pipeline intermittently fails to json.loads() Claude's reply. Logs show responses wrapped in ```json ... ``` fences. How do you get clean, parseable JSON every time?">
+**Wrong approach:** Add "no markdown please" to the prompt and hope. Still probabilistic.
+
+**Correct approach:** Switch to a forced tool with an `input_schema`; read `tool_use.input` as a dict. No parsing, no fences, schema-validated. Tests knowing tool schemas > prompt instructions for reliable structure.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario 2: The Wandering Classifier" prompt="A sentiment classifier should output exactly positive/negative/neutral, but sometimes returns 'mostly positive' or a sentence. How do you constrain output to one of three exact labels?">
+**Wrong approach:** List the labels in the prompt and trust the model to comply verbatim.
+
+**Correct approach:** Define a tool field with `enum:["positive","negative","neutral"]` and force the tool — the value is guaranteed to be one of the three.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="Which structured-output technique gives the strongest schema guarantees, and why?">
+A **tool with `input_schema`** (forced via `tool_choice`). The `tool_use.input` is validated against the schema and delivered as a parsed object — no string parsing, no markdown fences.
+</RevealAnswer>

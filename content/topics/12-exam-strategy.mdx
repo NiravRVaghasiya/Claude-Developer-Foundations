@@ -1,0 +1,61 @@
+## Time Management (120 min / 53 questions)
+
+- Budget **~2.3 minutes per question**. Check the clock at the 15-, 30-, and 45-question marks; if you're slower than ~2.3 min/q, speed up.
+- **Two-pass triage:** answer everything you know cold on pass 1; **flag and return** to hard/long scenarios on pass 2. Never let one 5-line scenario eat 8 minutes early.
+- **Multiple-response** ("select all that apply") questions take longer — the trap is **under-selecting** (stopping at one correct option).
+
+## Process of Elimination
+
+1. **Kill absolute-language options first** — "always / never / only" are usually wrong on a judgment exam.
+2. **Kill the cost-blind option** — an answer that ignores token cost, caching, or batch is often the distractor.
+3. **Kill the over-engineered option** — an autonomous agent where a deterministic workflow suffices.
+4. **Kill the biggest-model reflex** — Opus when the budget calls for Sonnet/Haiku.
+5. **Prefer qualified, trade-off-aware answers** — they mirror the documentation tone.
+
+## "Always / Never" Rules to Memorize
+
+| Rule |
+|---|
+| **Always** provide `max_tokens` — it's required and caps **output**. |
+| **Never** put a `system` role inside `messages[]` — `system` is top-level. |
+| **Always** resend the full `messages[]` — the API is **stateless**. |
+| **Never** let Claude execute a tool — **your code** runs it and returns a `tool_result`. |
+| **Always** match `tool_use_id` on every `tool_result`. |
+| **Always** bundle parallel `tool_result`s in **one** user message. |
+| **Never** rely on prompt wording alone for strict JSON — use a **tool `input_schema`**. |
+| **Always** pin a model version when reproducibility matters; aliases **float**. |
+| **Never** use streaming for cost/throughput — that's the **batch** API's job. |
+| **Never** rely on prompt instructions alone for security (injection defense is layered). |
+
+## Common Distractor Patterns
+
+- **The plausible instinct** — reads "right" on gut feeling (use Opus, add "return JSON," force the tool).
+- **The absolute** — technically-worded but says always/never/only.
+- **The cost-blind** — correct-sounding but ignores spend/caching/batch.
+- **The over-engineer** — agent/extra infra where a simple workflow wins.
+- **The half-answer** — correct but incomplete on a "select all" item (under-selection).
+- **The swap** — streaming↔batch, MCP↔custom tool, pin↔float, fast↔extended-thinking.
+
+## Last-24-Hour Review Checklist
+
+- Caching cost multipliers: **write 1.25× (5m) / 2.0× (1h), read 0.1×**; **4 breakpoints, 20-block lookback**; place on the **last stable block**.
+- `count_tokens` → **`input_tokens` only**, **free**, **ignores caching**, **+30%** on newer tokenizer.
+- Vision: **28×28 patches**, `⌈w/28⌉×⌈h/28⌉`; **Files API** in loops; formats **JPEG/PNG/GIF/WebP**.
+- **429 vs 529**; **backoff + jitter**; spend-cap 429 = no `retry-after`; don't retry `400/401/403`.
+- `stop_reason`: `end_turn` / `tool_use` / **`max_tokens`=truncated** / `pause_turn` / `refusal`; **loop guard**; parallel `tool_result` pairing.
+- Migration: **shadow → canary → ramp**; **pin versions**; **prefill gone on 4.6+**; rollback triggers.
+- Meta: distrust **always/never/only**; pick the **cost-aware, simplest-sufficient** answer; don't **under-select**.
+
+<Callout type="tip" title="Final mindset">
+The CCDV-F rewards **precision and trade-off judgment**, not memorized facts. For every question, ask: *"What's the plausible-but-wrong instinct here, and what qualified, cost-aware, right-sized answer beats it?"*
+</Callout>
+
+## High-Probability Exam Topics (ranked)
+
+1. **Messages API mechanics & statelessness** (Domain 1, 33.1%) — near-certain, multiple items.
+2. **Model selection trade-offs + cost/caching/batch** (Domain 2, 16.8%) — very high.
+3. **Tool use loop, `tool_choice`, parallel calls, MCP vs custom tools** (Domains 1 & 5) — high.
+4. **Streaming vs batch trade-off & SSE handling** (Domain 1) — high.
+5. **Structured output reliability (tool schema vs prompt)** (Domains 1 & 8) — moderate–high.
+6. **Agents vs deterministic workflows** (Domain 3, 14.7%) — over-engineering traps everywhere.
+7. **Prompt/context engineering, security** (Domains 4 & 6) — moderate.

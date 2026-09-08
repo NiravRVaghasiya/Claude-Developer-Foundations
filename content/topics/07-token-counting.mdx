@@ -1,0 +1,58 @@
+## Core Concept
+
+The **count-tokens endpoint** (`client.messages.count_tokens(...)`, HTTP `POST /v1/messages/count_tokens`) tells you exactly how many **input tokens** a request *would* consume **before you send it** — for free and without generating anything. It accepts the *same* structured payload as `messages.create`, so the count reflects your real request shape. Use it to budget spend, enforce context-window limits, and make model-routing decisions pre-flight. A **token** is roughly ¾ of a word; different model families tokenize differently, so a count is only valid for the model you passed.
+
+## Key Facts & Mechanics
+
+- Endpoint returns `{ "input_tokens": <int> }` — that's it (input only; it can't know output length in advance).
+- **Free**, but rate-limited **separately** from message creation. Using one does **not** draw down the other's limit.
+- **It does NOT apply caching logic** — the count is the raw, uncached total. Caching only happens at real `messages.create` time.
+- **Newer tokenizer alert:** Claude 4.7+ / Fable / Mythos produce **~30% more tokens** for the same text. **Recount against the target model** — never reuse an old count when migrating.
+- **Truncation strategy:** when a prompt exceeds the budget, cut from the **middle or the oldest turns**, not the instructions. Keep the **system prompt + most recent user turn** (they carry intent). Cutting the *end* would delete the actual question.
+
+## Annotated Code
+
+```python
+# Pre-flight budgeting: count BEFORE you spend a generation.
+count = client.messages.count_tokens(
+    model="claude-sonnet-5",          # count is model-specific — match your target model!
+    system=SYSTEM_PROMPT,
+    tools=TOOLS,                      # tools count too
+    messages=history + [new_turn],
+)
+budget = 180_000                      # leave headroom below the context window
+if count.input_tokens > budget:
+    history = summarize_or_drop_oldest(history)   # trim the MIDDLE/oldest, keep system + latest
+# Estimate $ before sending:
+est_cost = count.input_tokens/1e6 * 2.00 + 1024/1e6 * 10.00  # Sonnet 5 in/out prices
+```
+
+## Mental Model
+
+Counting tokens is **weighing your luggage at home before the airport**. The scale (endpoint) is free and instant; it saves you from the expensive surprise at the gate (a rejected over-limit request or a runaway bill). But it only weighs the **bag you're checking in** (input) — it can't weigh the souvenirs you'll buy on the trip (output). And a kilogram on one airline's scale reads differently on another's (**different tokenizers**).
+
+## Common Traps
+
+<Callout type="trap" title="count_tokens returns cost / output">
+**Trap:** "count_tokens returns total cost / output tokens." It returns **only `input_tokens`**. It cannot predict output length and does not price the request.
+</Callout>
+
+<Callout type="trap" title="Reusing counts across models">
+**Trap:** Reusing a token count across models. 4.7+/Fable/Mythos count ~30% higher. A prompt that "fit" on an older model may overflow the newer one's budget.
+</Callout>
+
+<Callout type="trap" title="count_tokens reflects cache savings">
+**Trap:** Thinking `count_tokens` reflects your cache savings. It ignores caching entirely — the number is the *uncached* total.
+</Callout>
+
+## Scenario Challenge
+
+<RevealAnswer title="Scenario: Migrating Budgets Across Tokenizers" prompt="You budget a migration by taking the input_tokens measured on Claude Opus 4.5 and assume the same count on Claude Fable 5. What happens?">
+You'd **under-budget by roughly 30%**. Fable uses the newer tokenizer (introduced with Opus 4.7) that emits ~30% more tokens for identical text. Prompts could unexpectedly exceed your cost budget or the context window. **Fix:** recount the *same* request with `model="claude-fable-5"` and compare the two `input_tokens` values before migrating.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="What exactly does the count_tokens endpoint return, and does it factor in prompt caching?">
+It returns only `{ "input_tokens": N }` — input count for the given model. It does NOT apply caching logic and cannot predict output tokens. It's free and rate-limited separately from message creation.
+</RevealAnswer>

@@ -1,0 +1,182 @@
+[
+  {
+    "id": "q1",
+    "topicId": "prompt-caching",
+    "question": "A cached prompt uses the default 5-minute tier. What are the write and read cost multipliers relative to base input price?",
+    "options": [
+      { "id": "a", "text": "Write 2.0x, read 0.1x" },
+      { "id": "b", "text": "Write 1.25x, read 0.1x" },
+      { "id": "c", "text": "Write 1.25x, read 0.25x" },
+      { "id": "d", "text": "Write 1.0x, read 0.5x" }
+    ],
+    "correctIds": ["b"],
+    "explanations": {
+      "a": "2.0x is the 1-hour write multiplier, not 5-minute.",
+      "b": "Correct. 5-minute writes cost 1.25x; reads cost 0.1x.",
+      "c": "0.25x read applies only to Fable/Mythos 5.1, not the general multiplier.",
+      "d": "Fabricated numbers; writes are never at base (1.0x) and reads aren't 0.5x."
+    }
+  },
+  {
+    "id": "q2",
+    "topicId": "prompt-caching",
+    "question": "You place cache_control on a block that contains a per-request timestamp at the end of your prompt. What is the most likely outcome across many requests?",
+    "options": [
+      { "id": "a", "text": "Steady cache reads at 0.1x after the first call" },
+      { "id": "b", "text": "A cache write on every request and no reads — more expensive than not caching" },
+      { "id": "c", "text": "A 400 error because timestamps can't be cached" },
+      { "id": "d", "text": "The timestamp is automatically stripped before hashing" }
+    ],
+    "correctIds": ["b"],
+    "explanations": {
+      "a": "Reads only happen if the hashed prefix is byte-identical; the timestamp breaks that.",
+      "b": "Correct. The changing timestamp misses every time → a fresh write each call, zero reads = strictly worse than no caching.",
+      "c": "There's no error — caching just silently fails to save.",
+      "d": "Nothing is auto-stripped; the hash is literal."
+    }
+  },
+  {
+    "id": "q3",
+    "topicId": "token-counting",
+    "question": "What does the count_tokens endpoint return, and does it account for prompt caching?",
+    "options": [
+      { "id": "a", "text": "Total input + output tokens, caching applied" },
+      { "id": "b", "text": "Only input_tokens, caching NOT applied" },
+      { "id": "c", "text": "A cost estimate in USD, caching applied" },
+      { "id": "d", "text": "Only output_tokens, caching NOT applied" }
+    ],
+    "correctIds": ["b"],
+    "explanations": {
+      "a": "It can't know output length and doesn't apply caching.",
+      "b": "Correct. It returns only input_tokens and does not apply caching logic.",
+      "c": "It returns no dollar figure.",
+      "d": "It's input, not output."
+    }
+  },
+  {
+    "id": "q4",
+    "topicId": "token-counting",
+    "question": "You migrate a prompt from Claude Opus 4.5 to Claude Fable 5 and reuse your old token counts for budgeting. What's the risk?",
+    "options": [
+      { "id": "a", "text": "No risk — counts are model-independent" },
+      { "id": "b", "text": "You'll over-budget by ~30%" },
+      { "id": "c", "text": "You'll under-budget by ~30% because the newer tokenizer emits more tokens" },
+      { "id": "d", "text": "The request will be rejected as incompatible" }
+    ],
+    "correctIds": ["c"],
+    "explanations": {
+      "a": "Counts are model-specific.",
+      "b": "Direction is reversed — you under-budget, not over.",
+      "c": "Correct. Claude 4.7+/Fable/Mythos use a newer tokenizer yielding ~30% more tokens, so old counts under-budget.",
+      "d": "The request isn't rejected — your estimate is just wrong."
+    }
+  },
+  {
+    "id": "q5",
+    "topicId": "vision",
+    "question": "How is an image's visual-token cost computed on current models?",
+    "options": [
+      { "id": "a", "text": "A flat 1,000 tokens per image" },
+      { "id": "b", "text": "ceil(width/28) x ceil(height/28) (28x28-pixel patches)" },
+      { "id": "c", "text": "width x height in pixels" },
+      { "id": "d", "text": "85 tokens for low detail, 170 for high" }
+    ],
+    "correctIds": ["b"],
+    "explanations": {
+      "a": "Not a flat rate.",
+      "b": "Correct. Claude tiles the image into 28x28-pixel patches (visual tokens).",
+      "c": "Raw w*h is far too large; /750 is an older approximation, not the patch formula.",
+      "d": "That's OpenAI's tiling scheme, not Claude's."
+    }
+  },
+  {
+    "id": "q6",
+    "topicId": "vision",
+    "question": "In a 10-turn agent that inspects many images, which approach best controls request size and latency?",
+    "options": [
+      { "id": "a", "text": "Base64-encode every image inline each turn" },
+      { "id": "b", "text": "Upload once via the Files API and reference by file_id" },
+      { "id": "c", "text": "Send image URLs that expire after one turn" },
+      { "id": "d", "text": "Convert every image to text descriptions client-side" }
+    ],
+    "correctIds": ["b"],
+    "explanations": {
+      "a": "Base64 is resent every turn, inflating size/latency and risking the 32 MB cap.",
+      "b": "Correct. The Files API uploads once and references by file_id, keeping payloads small as history grows.",
+      "c": "URL expiry breaks later turns and isn't the size fix.",
+      "d": "Text descriptions lose visual fidelity and change the task."
+    }
+  },
+  {
+    "id": "q7",
+    "topicId": "error-handling",
+    "question": "Your app suddenly gets 429 responses with no retry-after header, and exponential backoff never clears them. What is the most likely cause?",
+    "options": [
+      { "id": "a", "text": "A transient network blip" },
+      { "id": "b", "text": "A 529 mislabeled as 429" },
+      { "id": "c", "text": "A tier spend-cap 429 that won't clear until access resumes" },
+      { "id": "d", "text": "The retry-after header was dropped by your proxy and it's really ITPM" }
+    ],
+    "correctIds": ["c"],
+    "explanations": {
+      "a": "A blip would clear quickly.",
+      "b": "529s are labeled 529.",
+      "c": "Correct. No retry-after + never clears = a spend-cap 429, which resumes only when access is restored, not via backoff.",
+      "d": "An ITPM 429 does carry retry-after and clears with backoff — the opposite of what's described."
+    }
+  },
+  {
+    "id": "q8",
+    "topicId": "error-handling",
+    "question": "Which statement about 429 vs 529 is correct?",
+    "options": [
+      { "id": "a", "text": "Both indicate your organization exceeded a rate limit" },
+      { "id": "b", "text": "429 is Anthropic-side overload; 529 is your rate limit" },
+      { "id": "c", "text": "429 is your org's limit/spend; 529 is Anthropic infrastructure overload affecting all users" },
+      { "id": "d", "text": "529 should never be retried" }
+    ],
+    "correctIds": ["c"],
+    "explanations": {
+      "a": "Only 429 is your limit.",
+      "b": "It reverses the two.",
+      "c": "Correct. 429 = your org's rate limit/spend cap; 529 = Anthropic infrastructure overload affecting everyone.",
+      "d": "529 is transient and should be retried with backoff."
+    }
+  },
+  {
+    "id": "q9",
+    "topicId": "agent-loop",
+    "question": "Your agent loop receives stop_reason: \"max_tokens\". What does this mean and what should you do?",
+    "options": [
+      { "id": "a", "text": "The model finished cleanly; return the answer" },
+      { "id": "b", "text": "The output was truncated; raise max_tokens or continue — don't treat it as complete" },
+      { "id": "c", "text": "The model refused; inspect stop_details" },
+      { "id": "d", "text": "A tool was requested; execute it and loop" }
+    ],
+    "correctIds": ["b"],
+    "explanations": {
+      "a": "That's end_turn, not max_tokens.",
+      "b": "Correct. max_tokens means the response was truncated — incomplete; raise the cap or continue generation.",
+      "c": "Refusal is stop_reason: \"refusal\".",
+      "d": "A tool request is stop_reason: \"tool_use\"."
+    }
+  },
+  {
+    "id": "q10",
+    "topicId": "model-migration",
+    "question": "What is the exam-preferred rollout strategy for migrating a production workload to a new model?",
+    "options": [
+      { "id": "a", "text": "Big-bang: switch 100% of traffic at once to move fast" },
+      { "id": "b", "text": "Float a model alias in production so you always get the newest version" },
+      { "id": "c", "text": "Shadow -> canary (small %) -> gradual ramp, with rollback to a pinned version" },
+      { "id": "d", "text": "Only migrate if the new model is cheaper, otherwise never migrate" }
+    ],
+    "correctIds": ["c"],
+    "explanations": {
+      "a": "Big-bang risks a full outage (e.g., prefill removed on 4.6+).",
+      "b": "Floating aliases in prod destroy reproducibility.",
+      "c": "Correct. The exam-correct path is shadow → canary → gradual ramp with rollback to a pinned version.",
+      "d": "Cost isn't the only migration driver, and 'never migrate' ignores quality/capability gains."
+    }
+  }
+]

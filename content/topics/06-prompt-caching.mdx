@@ -1,0 +1,67 @@
+## Core Concept
+
+**Prompt caching** lets you mark a prefix of your prompt as reusable so Claude doesn't re-process it on every call. You pay a small premium once to **write** the cache, then pay a fraction of the input price on every **read** for the cache's lifetime. It shines when a large, *stable* chunk of context (system prompt, tool definitions, a long document, few-shot examples) is sent repeatedly. The cache key is a **cumulative hash of everything up to and including the `cache_control` block** — change one byte in the prefix and you get a fresh (paid) write, not a read.
+
+## Key Facts & Mechanics
+
+- Enable it two ways: **automatic caching** (one top-level `cache_control` field — the breakpoint auto-moves to the last cacheable block) or **explicit cache breakpoints** (`cache_control` on individual content blocks).
+- The `cache_control` type is always `{"type": "ephemeral"}`. Add `"ttl": "1h"` for the 1-hour tier.
+- **Two TTL tiers:** `5m` (default) and `1h`.
+- **Cost multipliers on base input price:**
+  - `5m` cache **write** = **1.25×** base input
+  - `1h` cache **write** = **2.0×** base input
+  - Cache **read / refresh** = **0.1×** base input
+- **Cache reads and refreshes are FREE to refresh the clock** — every hit resets the TTL at no extra cost.
+- **Up to 4 cache breakpoints** per request. **Lookback window = 20 blocks.**
+- **Minimum cacheable length** (or the block is silently not cached, no error): commonly **1,024 tokens** (Sonnet/Haiku-class), **512 tokens** (Opus 5 / Fable / Mythos).
+- **Prefix order is fixed:** `tools` → `system` → `messages`.
+- Verify a cache hit via `response.usage`: `cache_creation_input_tokens` (write) and `cache_read_input_tokens` (read). If both are `0`, nothing was cached.
+
+## Annotated Code
+
+```python
+# Explicit breakpoint: cache the STABLE system context, not the volatile suffix.
+response = client.messages.create(
+    model="claude-sonnet-5",
+    max_tokens=1024,
+    system=[
+        {
+            "type": "text",
+            "text": LARGE_STATIC_INSTRUCTIONS,        # e.g. a 50k-token policy doc
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},  # breakpoint on the LAST stable block
+        }
+    ],
+    messages=[
+        {"role": "user", "content": user_question}    # volatile — must come AFTER the breakpoint
+    ],
+)
+usage = response.usage
+# cache_creation_input_tokens > 0 on the first call (write);
+# cache_read_input_tokens > 0 on subsequent calls within TTL (read @ 0.1x).
+```
+
+## Mental Model
+
+Think of the cache like a **library photocopier that pre-scans a fat reference binder**. The first person pays to scan it (the **write**, 1.25–2×). Everyone who reuses that scan pays pennies (the **read**, 0.1×). But the scan is keyed to the *exact* binder — slip one new page into the middle and the copier re-scans from that point. So put pages that never change **first**, and the page you scribble on today **last**.
+
+## Common Traps
+
+<Callout type="trap" title="Breakpoint on a changing block">
+**Trap:** Putting `cache_control` on the block that changes every request (a timestamp or the user message). You then pay a **write on every call and never get a read** — strictly *more* expensive than no caching. Fix: move the breakpoint to the last *stable* block.
+</Callout>
+
+<Callout type="trap" title="Short prompts get cached">
+**Trap:** Assuming a short prompt gets cached. Below the model's token minimum, `cache_control` is silently ignored — no error, no savings.
+</Callout>
+
+## Scenario Challenge
+
+<RevealAnswer title="Scenario: The Timestamp Before the Breakpoint" prompt="You enable a 1-hour cache on a 40k-token system prompt, then discover your app appends a per-request 'Current time: {timestamp}' line to the system prompt right before the breakpoint. What happens?">
+The timestamp changes the cumulative hash on **every** request, so every call is a **cache miss → fresh 2× write** and you *never* read. You'd pay 2× base input every time — worse than not caching. **Fix:** move the volatile timestamp *after* the breakpoint (into the messages), keeping the static 40k prefix byte-identical so it reads at 0.1×.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="On the default 5-minute tier, what does a cache WRITE cost and what does a READ cost?">
+Write = 1.25× base input tokens; Read/refresh = 0.1× base input tokens. Bonus: 1-hour tier writes cost 2.0×. Reads are always 0.1×. Max 4 breakpoints, 20-block lookback.
+</RevealAnswer>

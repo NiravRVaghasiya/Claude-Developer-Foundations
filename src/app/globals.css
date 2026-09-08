@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
+.dark {
+  --bg: #0b0f17;
+  --fg: #e6e8ec;
+}
+
+/* rehype-pretty-code: show both themes, toggle by .dark on <html> */
+html.dark code[data-theme="light"],
+html.dark code[data-theme="light"] span[data-theme="light"] {
+  display: none;
+}
+html:not(.dark) code[data-theme="dark"],
+html:not(.dark) code[data-theme="dark"] span[data-theme="dark"] {
+  display: none;
+}
+
+/* code blocks */
+[data-rehype-pretty-code-figure] pre {
+  overflow-x: auto;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+[data-rehype-pretty-code-figure] code {
+  display: grid;
+  counter-reset: line;
+}
+[data-rehype-pretty-code-figure] code > [data-line] {
+  padding: 0 0.25rem;
+}
+code[data-line-numbers] > [data-line]::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 1.5rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: #7d8590;
+}
+:not(pre) > code {
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.3rem;
+  font-size: 0.85em;
+  background-color: rgba(127, 127, 127, 0.15);
+}

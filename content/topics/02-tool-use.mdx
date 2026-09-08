@@ -1,0 +1,134 @@
+## Core Concept
+
+Tool use lets Claude **request** that *your* code run a function. Claude never executes anything itself — it emits a `tool_use` block (name + JSON args), **you** run the function, then you send the result back as a `tool_result` block. It's a request/response handshake you orchestrate in a loop.
+
+## Annotated Code
+
+```python
+tools = [
+    {
+        "name": "get_weather",                       # must match tool_use.name exactly
+        "description": "Get current weather for a city. Use for any weather question.",
+        # ↑ description is CRITICAL — it's how Claude decides WHEN to call this tool
+        "input_schema": {                            # JSON Schema — this is the contract
+            "type": "object",
+            "properties": {
+                "city": {"type": "string", "description": "City name, e.g. 'Kyoto'"},
+                "unit": {"type": "string", "enum": ["c", "f"], "description": "Temp unit"}
+            },
+            "required": ["city"]                     # unit is optional; city is mandatory
+        }
+    }
+]
+
+response = client.messages.create(
+    model="claude-sonnet-4-5",
+    max_tokens=1024,
+    tools=tools,
+    messages=[{"role": "user", "content": "What's the weather in Kyoto?"}]
+)
+# Claude responds with stop_reason == "tool_use" and a tool_use block:
+#   {"type": "tool_use", "id": "toolu_01X", "name": "get_weather",
+#    "input": {"city": "Kyoto"}}
+```
+
+## The full `tool_use` → `tool_result` cycle
+
+```text
+STEP 1  user asks a question
+STEP 2  Claude replies, stop_reason = "tool_use", content has a tool_use block
+STEP 3  YOU run get_weather("Kyoto") in your own code -> "18C, clear"
+STEP 4  You append the assistant tool_use turn AND a user turn with a tool_result
+STEP 5  Call the API again with the grown messages[]; Claude replies, stop_reason = "end_turn"
+```
+
+```python
+# STEP 4-5 — note tool_use_id MUST match the id from the tool_use block
+messages.append({"role": "assistant", "content": response.content})  # replay tool_use
+messages.append({
+    "role": "user",
+    "content": [{
+        "type": "tool_result",
+        "tool_use_id": "toolu_01X",     # ← links result to the request; mismatch = error
+        "content": "18C, clear"          # string, or list of blocks; can be an error too
+    }]
+})
+final = client.messages.create(model="claude-sonnet-4-5", max_tokens=1024,
+                               tools=tools, messages=messages)
+```
+
+## Parallel tool calls
+
+```python
+# Claude may return MULTIPLE tool_use blocks in ONE response.
+tool_uses = [b for b in response.content if b.type == "tool_use"]
+results = []
+for tu in tool_uses:                      # run each (optionally concurrently)
+    output = dispatch(tu.name, tu.input)  # your function router
+    results.append({
+        "type": "tool_result",
+        "tool_use_id": tu.id,             # each result tied to its own id
+        "content": str(output)
+    })
+# ALL tool_results go in a SINGLE user message — one block per tool_use:
+messages.append({"role": "user", "content": results})
+```
+
+<Callout type="tip" title="Parallel result rule">
+Return **one `tool_result` per `tool_use`**, all bundled in **one** user message, each keyed by its `tool_use_id`. Splitting them across multiple messages, or dropping one, breaks the loop.
+</Callout>
+
+## Forcing a specific tool & disabling tools
+
+```python
+tool_choice={"type": "tool", "name": "get_weather"}  # force a specific tool
+tool_choice={"type": "any"}                            # force SOME tool; Claude picks
+tool_choice={"type": "auto"}                           # default — Claude decides
+# "Disable all tools": omit the tools parameter (or pass []); or tool_choice none where supported.
+```
+
+<Callout type="trap" title="Forced tools skip text">
+When you **force** a tool with `{"type": "tool", ...}` or `{"type": "any"}`, Claude calls a tool on the **first** turn and typically won't produce a plain text answer — plan your loop accordingly.
+</Callout>
+
+## Mental Model
+
+Claude is a **brilliant analyst locked in a room with a telephone but no hands**. It can *tell you* "call the weather service with city=Kyoto," but *you* pick up the phone, dial, and read the answer back through the slot (`tool_result`). The `tool_use_id` is the **ticket number** stapling each answer to the right request.
+
+## Common Traps
+
+<Callout type="trap" title="Claude executes the tool">
+**Misconception:** Claude executes the tool and returns the function's output directly.
+**Reality:** Claude only REQUESTS the call. Your application runs the function and returns a `tool_result`. Claude then incorporates it.
+</Callout>
+
+<Callout type="trap" title="Separate messages for parallel results">
+**Misconception:** For 3 parallel tool calls, send 3 separate `tool_result` messages.
+**Reality:** All `tool_result`s for one assistant turn go in ONE user message, one block each, each tagged with the matching `tool_use_id`.
+</Callout>
+
+## Exam Tips
+
+- When the tool description is vague, Claude calls it at the wrong time. If a question asks "why is the tool never/always firing," suspect the **description**, not the schema.
+- `tool_use_id` mismatches and missing `required` schema fields are classic bug-spotting items.
+- "Disable tools" ≠ a special flag — it's simply **not providing tools** (or `tool_choice: none`).
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario 1: The Infinite Tool Loop" prompt="An assistant with a database tool keeps calling the tool over and over, never giving the user a final answer. How do you terminate the loop correctly?">
+**Wrong approach:** Set `tool_choice={"type":"tool",...}` for every call to "make sure it uses the DB." This FORCES a tool call every turn — it can never finish.
+
+**Correct approach:** Use `tool_choice="auto"`. After returning the `tool_result`, call again; Claude produces a text answer with `stop_reason` `"end_turn"`. Loop only while `stop_reason == "tool_use"`.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario 2: The Crashing Tool" prompt="A currency-conversion tool throws when the external API times out, and the whole request 500s. How do you let Claude recover gracefully?">
+**Wrong approach:** Let the exception bubble up and crash the request. Claude never learns the call failed and can't adapt.
+
+**Correct approach:** Catch the error and return a `tool_result` with the error described (set `"is_error": true`, `content` = message). Claude can then apologize, retry, or ask the user — the loop stays intact.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="Who executes the tool, and what field links a tool_result to its tool_use?">
+**Your code** executes the tool — Claude only emits a request. The `tool_use_id` links the `tool_result` back to the `tool_use`; it must exactly match the `id` on the corresponding `tool_use` block.
+</RevealAnswer>

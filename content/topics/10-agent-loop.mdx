@@ -1,0 +1,79 @@
+## Core Concept
+
+An **agent loop** is the cycle: call the model → if it requests a tool (`stop_reason: "tool_use"`) → **execute** that tool in your code → **feed the result back** as a `tool_result` in a new user turn → repeat until the model finishes (`stop_reason: "end_turn"`). The `stop_reason` field is your control signal for whether to continue, stop, retry, or handle specially. A robust loop always has a **loop guard** (max iterations) so a misbehaving model can't spin forever.
+
+## Key Facts & Mechanics
+
+- **`stop_reason` values you must know:**
+  - `end_turn` — Claude finished naturally → **stop / return to user**.
+  - `tool_use` — Claude wants a tool → **run it, return `tool_result`, loop**.
+  - `max_tokens` — hit the `max_tokens` cap → response is **truncated**; raise the cap or continue.
+  - `stop_sequence` — hit one of your `stop_sequences` → read `stop_sequence` to see which.
+  - `pause_turn` — a long-running server tool paused → **resend the response** to continue.
+  - `refusal` — Claude declined for safety → **do not retry blindly**; `stop_details` names the policy category.
+  - `model_context_window_exceeded` — prompt+output overflowed → trim context.
+- The tool-use turn contains **`tool_use` content blocks** with an `id`, `name`, and `input`. You reply with matching **`tool_result` blocks** referencing each `tool_use_id`.
+- **Parallel vs sequential:** one assistant turn can emit **multiple `tool_use` blocks at once** (parallel) — you must return **all** corresponding `tool_result` blocks in the *next single user turn*.
+- Append the **assistant's tool_use turn** to history *before* adding your `tool_result` — the API requires the pairing to be intact.
+- **Loop guard:** cap iterations (e.g., `MAX_STEPS = 10`) to prevent infinite tool loops and runaway cost.
+
+## Annotated Code
+
+```python
+messages = [{"role": "user", "content": user_query}]
+MAX_STEPS = 10                                   # loop guard: never spin forever
+
+for _ in range(MAX_STEPS):
+    resp = client.messages.create(               # Step 1: call the model
+        model="claude-sonnet-5", max_tokens=1024,
+        tools=TOOLS, messages=messages,
+    )
+    if resp.stop_reason == "end_turn":           # Step 2: natural finish -> done
+        break
+    if resp.stop_reason == "max_tokens":
+        break                                    # response TRUNCATED — don't treat as complete
+    if resp.stop_reason == "tool_use":
+        messages.append({"role": "assistant", "content": resp.content})  # keep tool_use intact
+        tool_results = []
+        for block in resp.content:               # Step 3: handle ALL tool calls (may be parallel)
+            if block.type == "tool_use":
+                out = execute_tool(block.name, block.input)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,     # must match the tool_use id
+                    "content": str(out),
+                })
+        messages.append({"role": "user", "content": tool_results})  # Step 4: feed results, loop
+else:
+    raise RuntimeError("Hit max steps without end_turn")   # guard tripped
+```
+
+## Mental Model
+
+The agent loop is a **chef (Claude) with a runner (your code)**. The chef shouts an order — "I need diced onions" (`tool_use`). The runner fetches and drops them on the pass (`tool_result`). The chef keeps cooking, maybe shouts two orders at once (**parallel calls** — the runner brings *both* back together). When the plate's done, the chef calls "service!" (`end_turn`). The **loop guard** is the kitchen rule that after 10 shouts with no finished plate, the manager steps in.
+
+## Common Traps
+
+<Callout type="trap" title="max_tokens is a successful finish">
+**Trap:** Treating `max_tokens` as a successful finish. `stop_reason: "max_tokens"` means the output was **cut off** — the answer is incomplete. Only `end_turn` (and sometimes `stop_sequence`) is a clean finish.
+</Callout>
+
+<Callout type="trap" title="One tool_result for parallel calls">
+**Trap:** Returning only one `tool_result` when the model made parallel calls. You must return **every** `tool_result` (matched by `tool_use_id`) in the **next single user turn**, or the request errors.
+</Callout>
+
+<Callout type="trap" title="No loop guard">
+**Trap:** A model that keeps requesting tools with no `end_turn` will spin infinitely and burn cost — the exam expects a **max-iterations** cap.
+</Callout>
+
+## Scenario Challenge
+
+<RevealAnswer title="Scenario: Two Parallel Tool Calls, One Result" prompt="The model returns a turn with two tool_use blocks (parallel calls) and your loop executes both but only appends one tool_result before calling the API again. What happens?">
+The next request is **malformed**: every `tool_use` block must be answered by a matching `tool_result` (by `tool_use_id`) in the following user turn. The API returns a **`400 invalid_request_error`**. **Fix:** collect *all* tool outputs into a single user message containing one `tool_result` per `tool_use_id`, then continue the loop.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="Which stop_reason means 'run a tool and continue,' and which means 'truncated, not really done'?">
+`tool_use` = execute the tool(s), return tool_result(s), loop. `max_tokens` = output was TRUNCATED (incomplete). `end_turn` = clean finish. Always cap iterations with a loop guard.
+</RevealAnswer>

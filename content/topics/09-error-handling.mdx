@@ -1,0 +1,73 @@
+## Core Concept
+
+Production Claude apps must survive transient failures. The two you'll be tested on are **`429 rate_limit_error`** (your org crossed a limit — RPM, **input tokens/min (ITPM)**, **output tokens/min (OTPM)**, or a spend cap) and **`529 overloaded_error`** (Anthropic's infrastructure is temporarily saturated — everyone, not just you). The correct response to both transient errors is **retry with exponential backoff + jitter**, honoring the **`retry-after`** header when present. To retry *safely* without duplicate side effects, use **idempotency**.
+
+## Key Facts & Mechanics
+
+- **`429 rate_limit_error`** — *your* account/org hit a limit: **RPM**, **ITPM**, **OTPM**, monthly spend cap, or workspace spend limit.
+  - In long agent loops a 429 is **almost always ITPM**, not RPM. **Cache the system prompt** and gate on `anthropic-ratelimit-input-tokens-remaining`.
+  - A **tier spend-cap 429 has NO `retry-after` header** and keeps failing until access resumes — backoff won't fix it.
+- **`529 overloaded_error`** — Anthropic-side capacity strain affecting all users; not your fault, not your limits. Usually resolves in **seconds to minutes**. Check the status page; retry with backoff.
+- **Other codes:** `400 invalid_request_error`, `401 authentication_error`, `403 permission_error`, `404 not_found_error`, `413 request_too_large` (>32 MB), `500 api_error`, `504 timeout_error`.
+- **SDKs auto-retry** transient failures (connection errors, 429, 5xx) with exponential backoff **twice by default**, honoring `retry-after`. Configure via a **max-retries** option.
+- **Exponential backoff with jitter:** wait `min(cap, base * 2**attempt)` then add random jitter to avoid a **thundering herd**.
+- **Idempotency:** send an idempotency key / dedupe on a client-generated request ID so a retried request isn't processed twice. Guard state-changing side effects (e.g., a tool that charges a card).
+
+## Annotated Code
+
+```python
+import random, time
+
+def call_with_backoff(fn, max_retries=5, base=1.0, cap=60.0):
+    for attempt in range(max_retries):
+        try:
+            return fn()
+        except anthropic.RateLimitError as e:          # HTTP 429
+            retry_after = getattr(e, "retry_after", None)
+            wait = float(retry_after) if retry_after else min(cap, base * 2**attempt)
+            time.sleep(wait + random.uniform(0, wait * 0.25))   # backoff + JITTER
+        except anthropic.InternalServerError:          # 500/529-class transient
+            time.sleep(min(cap, base * 2**attempt) + random.random())
+        # Do NOT retry 400/401/403 — those are permanent; fix the request/key/permission.
+    raise RuntimeError("Exhausted retries")
+```
+
+## 429 vs 529 — the comparison the exam loves
+
+| | **429 `rate_limit_error`** | **529 `overloaded_error`** |
+|---|---|---|
+| **Whose fault** | Your org crossed a limit | Anthropic infra saturated (all users) |
+| **Typical cause** | RPM / **ITPM** / OTPM / spend cap | Temporary capacity strain |
+| **`retry-after` header** | Usually present (*absent* for spend-cap 429s) | Not guaranteed — use backoff |
+| **Right fix** | Slow down, cache, gate on remaining-tokens headers | Retry with backoff + jitter; check status page |
+| **Persists after backoff?** | Yes, if it's a **spend cap** | No — usually clears in seconds–minutes |
+
+## Mental Model
+
+**429 is your own metered driveway; 529 is a citywide power outage.** A `429` means *you* parked too many cars — wait, thin out traffic, check the `retry-after` sign. A `529` means the whole grid is down — nothing you did, and it'll come back on its own; just keep politely knocking (with backoff). **Jitter** is everyone agreeing not to all knock at the exact same second.
+
+## Common Traps
+
+<Callout type="trap" title="429 and 529 handled the same">
+**Trap:** "429 means slow down; 529 means slow down too — same handling." Different causes. A **spend-cap 429** has *no* `retry-after` and won't clear with backoff; a 529 is server-side and *will* clear.
+</Callout>
+
+<Callout type="trap" title="Retrying a 400/401/403">
+**Trap:** Retrying a `400`/`401`/`403`. These are **permanent** (bad request, bad key, no permission). Retrying wastes calls — fix the input/credentials instead.
+</Callout>
+
+<Callout type="trap" title="Backoff without jitter">
+**Trap:** Synchronized retries create a **thundering herd** that re-triggers overload. Jitter is not optional in the exam-correct answer.
+</Callout>
+
+## Scenario Challenge
+
+<RevealAnswer title="Scenario: 429 With No retry-after" prompt="Your agent loop starts returning 429 with no retry-after header, and your backoff keeps escalating but every retry still 429s. What is this?">
+This is the signature of a **tier spend-cap 429**, *not* a transient rate limit. Backoff will never clear it because it's not a "too fast" problem — it's "access is paused until the cap resets or is raised." **Fix:** recognize the missing `retry-after`, stop retrying, and resolve the spend cap. Distinguish it from ITPM 429s, which *do* carry `retry-after` and *do* clear with backoff + caching.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="What HTTP status is a rate limit, what is server overload, and what's the core difference?">
+429 = rate_limit_error (YOUR org hit a limit/spend cap; check retry-after). 529 = overloaded_error (Anthropic's infra saturated for ALL users; retry with backoff+jitter). Bonus: a spend-cap 429 has NO retry-after and won't clear via backoff.
+</RevealAnswer>

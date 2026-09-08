@@ -1,0 +1,70 @@
+## Core Concept
+
+Claude accepts **images** as `image` content blocks inside a user message, using one of three `source` types: **base64**, **URL**, or a **`file_id`** from the Files API. Images are billed as **visual tokens** based on their pixel dimensions, so resolution directly drives cost. **Documents** (PDFs) go in as `document` blocks, handled page-by-page. Placing images **before** text generally improves results. In multi-turn/agentic flows, prefer the **Files API** so you don't resend heavy base64 bytes on every turn.
+
+## Key Facts & Mechanics
+
+- **Image block source types:**
+  ```json
+  {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "<b64>"}}
+  {"type": "image", "source": {"type": "url", "url": "https://..."}}
+  {"type": "image", "source": {"type": "file", "file_id": "file_..."}}
+  ```
+- **Supported media types:** `image/jpeg`, `image/png`, `image/gif`, `image/webp`. **Animations unsupported — only the first frame is read.**
+- **Size / count limits:**
+  - Max **10 MB** per image (base64) on the direct API; **5 MB** on Bedrock/Google Cloud.
+  - Max dimensions **8000×8000 px**.
+  - **100 images/request** for 200k-context models; **600/request** for others; **20/message** on claude.ai.
+  - If a request has **>20 images**, a stricter per-image dimension cap kicks in — resize so neither side exceeds **2000 px**.
+- **Token cost of images:** Claude views images in **28×28-pixel patches** (**visual tokens**). Cost = **⌈width/28⌉ × ⌈height/28⌉** visual tokens.
+  - **Resolution tiers:** High-res (Claude 4.7+) max long edge **2576 px**; Standard (all others) max long edge **1568 px**. Larger images are **downscaled** before processing.
+- Watch the **32 MB per-request cap** separately from the 10 MB per-image cap.
+
+## Annotated Code
+
+```python
+# Prefer image-BEFORE-text; use Files API in agent loops to avoid re-sending bytes.
+file = client.files.upload(file=("chart.png", open("chart.png","rb"), "image/png"))
+msg = client.messages.create(
+    model="claude-opus-5",
+    max_tokens=1024,
+    messages=[{
+        "role": "user",
+        "content": [
+            {"type": "image", "source": {"type": "file", "file_id": file.id}},  # image first
+            {"type": "text", "text": "What trend does this chart show?"},        # text second
+        ],
+    }],
+)
+# Cost of a 1568x1568 image ≈ ceil(1568/28) * ceil(1568/28) = 56 * 56 = 3136 visual tokens.
+```
+
+## Mental Model
+
+An image is billed like **floor tiles in a room**: Claude lays down **28×28 tiles** (`patches`) and counts how many it takes to cover the floor. A bigger room (higher resolution) = more tiles = more tokens. And if the room is bigger than the building allows (over the long-edge limit), the model **shrinks the blueprint** (downscales) before tiling.
+
+## Common Traps
+
+<Callout type="trap" title="Higher resolution is always better">
+**Trap:** Beyond the tier's long-edge limit the image is **downscaled anyway** — you gain nothing and pre-downscale you'd have paid for tokens you didn't need. Right-size images to the tier.
+</Callout>
+
+<Callout type="trap" title="Base64 in an agent loop">
+**Trap:** Base64 bytes are **resent on every turn**, ballooning payload size and latency. The exam-correct move is the **Files API** (`file_id`).
+</Callout>
+
+<Callout type="trap" title="Per-image vs per-request size">
+**Trap:** Confusing per-image size (10 MB) with per-request size (32 MB). You can hit the **32 MB request cap** long before the 600-image count with several large base64 images.
+</Callout>
+
+## Scenario Challenge
+
+<RevealAnswer title="Scenario: 15 Screenshots Over 10 Turns" prompt="You build an agent that inspects 15 screenshots across a 10-turn conversation, embedding each as base64 in the user turns. What happens?">
+Because each request resends the **entire conversation history**, all accumulated base64 image bytes are re-transmitted every turn — request size and latency grow turn over turn, and you risk the **32 MB per-request limit** and higher costs. **Fix:** upload each screenshot once via the **Files API** and reference by `file_id`; payloads stay small regardless of history length.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="How is an image's token cost calculated, and what's the patch size?">
+Claude tiles the image into 28×28-pixel patches (visual tokens): cost = ⌈width/28⌉ × ⌈height/28⌉. Images over the tier's long-edge limit are downscaled first.
+</RevealAnswer>

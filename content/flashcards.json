@@ -1,0 +1,146 @@
+[
+  {
+    "id": "fc-messages-api-1",
+    "topicId": "messages-api",
+    "question": "Where does the system prompt go in the Messages API, and why can't it be a message?",
+    "answer": "It's a top-level `system` parameter. It's a standing instruction, not a conversational turn — there is no `system` role in `messages[]`, so putting it there raises a validation error."
+  },
+  {
+    "id": "fc-messages-api-2",
+    "topicId": "messages-api",
+    "question": "Your response comes back with stop_reason: \"max_tokens\". Is the output complete? What's the fix?",
+    "answer": "No — it's truncated. Increase `max_tokens`, or make a continuation call. Only `end_turn` (and sometimes `stop_sequence`) is a clean finish."
+  },
+  {
+    "id": "fc-messages-api-3",
+    "topicId": "messages-api",
+    "question": "Why must you resend the whole conversation on every turn?",
+    "answer": "The API is stateless — no server-side memory. The full `messages[]` array IS the memory; omit earlier turns and Claude loses that context."
+  },
+  {
+    "id": "fc-tool-use-1",
+    "topicId": "tool-use",
+    "question": "Who executes the tool, and what field links a tool_result to its tool_use?",
+    "answer": "Your code executes the tool — Claude only emits a request. The `tool_use_id` links the `tool_result` back to the `tool_use`; it must exactly match the `id` on the corresponding `tool_use` block."
+  },
+  {
+    "id": "fc-tool-use-2",
+    "topicId": "tool-use",
+    "question": "Claude returns two tool_use blocks. How many messages do you send back, and how are results structured?",
+    "answer": "One user message containing two `tool_result` blocks — one per `tool_use`, each keyed by its own `tool_use_id`."
+  },
+  {
+    "id": "fc-tool-use-3",
+    "topicId": "tool-use",
+    "question": "How do you let Claude recover from a tool that throws?",
+    "answer": "Catch the error and return a `tool_result` with `is_error: true` and the message as content. Claude can then apologize, retry, or ask the user — the loop stays intact."
+  },
+  {
+    "id": "fc-structured-output-1",
+    "topicId": "structured-output",
+    "question": "Which structured-output technique gives the strongest schema guarantees, and why?",
+    "answer": "A tool with `input_schema` (forced via `tool_choice`). The `tool_use.input` is validated against the schema and delivered as a parsed object — no string parsing, no markdown fences."
+  },
+  {
+    "id": "fc-structured-output-2",
+    "topicId": "structured-output",
+    "question": "You prefill the assistant turn with '{'. What must you remember when parsing?",
+    "answer": "The prefilled '{' is NOT echoed back in response.content — you must prepend it yourself (and re-append '}' if you stopped on it) before json.loads()."
+  },
+  {
+    "id": "fc-streaming-1",
+    "topicId": "streaming",
+    "question": "Which event carries incremental text, and does streaming reduce total or perceived latency?",
+    "answer": "`content_block_delta` (with a `text_delta`) carries incremental text — accumulate each into a buffer. Streaming reduces perceived latency (TTFB); total generation time is roughly the same."
+  },
+  {
+    "id": "fc-streaming-2",
+    "topicId": "streaming",
+    "question": "When should you use the batch API instead of streaming?",
+    "answer": "For non-interactive, high-volume/offline jobs where cost matters. Batch is ~50% cheaper and async. Streaming is for interactive UX, not throughput or cost."
+  },
+  {
+    "id": "fc-model-selection-1",
+    "topicId": "model-selection",
+    "question": "A high-volume intent-classification endpoint needs low cost and low latency. Which model?",
+    "answer": "Haiku — cheapest and fastest, and classification doesn't need Opus-level reasoning."
+  },
+  {
+    "id": "fc-model-selection-2",
+    "topicId": "model-selection",
+    "question": "Why shouldn't you tune temperature and top_p together, and pin vs float?",
+    "answer": "They both control randomness via overlapping mechanisms; adjusting both makes output unpredictable — change one. Pin a dated model ID for reproducible production; 'latest' aliases float and can silently change behavior."
+  },
+  {
+    "id": "fc-prompt-caching-1",
+    "topicId": "prompt-caching",
+    "question": "On the default 5-minute tier, what does a cache WRITE cost and what does a READ cost?",
+    "answer": "Write = 1.25x base input; Read/refresh = 0.1x. 1-hour tier writes cost 2.0x. Max 4 breakpoints, 20-block lookback. Place the breakpoint on the LAST stable block."
+  },
+  {
+    "id": "fc-prompt-caching-2",
+    "topicId": "prompt-caching",
+    "question": "Why is putting cache_control on a block with a per-request timestamp a mistake?",
+    "answer": "The timestamp changes the cumulative hash every request → cache miss → fresh write each time, zero reads. That's strictly more expensive than not caching. Move volatile content after the breakpoint."
+  },
+  {
+    "id": "fc-token-counting-1",
+    "topicId": "token-counting",
+    "question": "What exactly does the count_tokens endpoint return, and does it factor in caching?",
+    "answer": "Only { \"input_tokens\": N } for the given model. It does NOT apply caching logic and cannot predict output tokens. It's free and rate-limited separately from message creation."
+  },
+  {
+    "id": "fc-token-counting-2",
+    "topicId": "token-counting",
+    "question": "What's the risk of reusing an old token count when migrating to a newer model?",
+    "answer": "Claude 4.7+/Fable/Mythos use a newer tokenizer emitting ~30% more tokens for identical text. Reusing old counts under-budgets by ~30%. Always recount on the target model."
+  },
+  {
+    "id": "fc-vision-1",
+    "topicId": "vision",
+    "question": "How is an image's token cost calculated, and what's the patch size?",
+    "answer": "Claude tiles the image into 28x28-pixel patches (visual tokens): cost = ceil(width/28) * ceil(height/28). Images over the tier's long-edge limit are downscaled first."
+  },
+  {
+    "id": "fc-vision-2",
+    "topicId": "vision",
+    "question": "In a multi-turn agent inspecting many images, what keeps request size and latency down?",
+    "answer": "Upload each image once via the Files API and reference by file_id. Base64 bytes are resent on every turn, ballooning payload size and risking the 32 MB per-request cap."
+  },
+  {
+    "id": "fc-error-handling-1",
+    "topicId": "error-handling",
+    "question": "What HTTP status is a rate limit, what is server overload, and what's the core difference?",
+    "answer": "429 = rate_limit_error (YOUR org hit a limit/spend cap; check retry-after). 529 = overloaded_error (Anthropic infra saturated for ALL users; retry with backoff+jitter). A spend-cap 429 has NO retry-after and won't clear via backoff."
+  },
+  {
+    "id": "fc-error-handling-2",
+    "topicId": "error-handling",
+    "question": "Which error codes should you NOT retry, and why is jitter required?",
+    "answer": "Don't retry 400/401/403 — they're permanent (bad request, key, or permission). Jitter avoids a thundering herd where synchronized retries re-trigger overload."
+  },
+  {
+    "id": "fc-agent-loop-1",
+    "topicId": "agent-loop",
+    "question": "Which stop_reason means 'run a tool and continue,' and which means 'truncated, not really done'?",
+    "answer": "tool_use = execute the tool(s), return tool_result(s), loop. max_tokens = output was TRUNCATED (incomplete). end_turn = clean finish. Always cap iterations with a loop guard."
+  },
+  {
+    "id": "fc-agent-loop-2",
+    "topicId": "agent-loop",
+    "question": "What happens if the model makes two parallel tool calls but you return only one tool_result?",
+    "answer": "The next request is malformed — every tool_use must be answered by a matching tool_result (by tool_use_id) in the following user turn. The API returns 400 invalid_request_error."
+  },
+  {
+    "id": "fc-model-migration-1",
+    "topicId": "model-migration",
+    "question": "What's the safe rollout order for a model migration, and why pin versions?",
+    "answer": "Shadow (mirror traffic, don't serve) → canary (small % real traffic) → gradual ramp → 100%, with fast rollback to a PINNED version. Pinning gives reproducibility; floating aliases break it in prod."
+  },
+  {
+    "id": "fc-model-migration-2",
+    "topicId": "model-migration",
+    "question": "Why can migrating a prefill-based prompt to Claude 4.6+ cause an outage?",
+    "answer": "Claude 4.6+ does not support assistant-message prefill → every prefilled request returns 400 invalid_request_error. Replace prefill with structured outputs / output_config.format / system-prompt guidance before migrating."
+  }
+]

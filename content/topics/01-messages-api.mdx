@@ -1,0 +1,121 @@
+## Core Concept
+
+The Messages API is a **stateless** endpoint: you send the **entire conversation** every turn as an ordered `messages[]` array, and Claude returns one `assistant` message. There is no server-side memory — *you* own the transcript and replay it each call. `system` is a **top-level parameter**, never a message.
+
+## Annotated Code
+
+```python
+import anthropic
+
+client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
+
+response = client.messages.create(
+    model="claude-sonnet-4-5",           # exact model ID string
+    max_tokens=1024,                     # REQUIRED — caps OUTPUT tokens; there is no default
+    system="You are a concise travel assistant.",  # top-level, NOT a messages[] entry
+    messages=[
+        {"role": "user",      "content": "Best month to visit Kyoto?"},
+        {"role": "assistant", "content": "Late November for autumn foliage."},  # prior turn replayed
+        {"role": "user",      "content": "Why then specifically?"}              # roles must ALTERNATE
+    ],
+    temperature=0.7,
+)
+
+# --- Reading the response ---
+print(response.content[0].text)   # content is a LIST of blocks; [0] is the first block
+print(response.stop_reason)       # WHY generation ended: "end_turn", "max_tokens", etc.
+print(response.usage.input_tokens, response.usage.output_tokens)  # billing + budgeting
+print(response.role)              # always "assistant" on the response object
+```
+
+Full annotated response shape:
+
+```json
+{
+  "id": "msg_01ABC...",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-sonnet-4-5",
+  "content": [
+    { "type": "text", "text": "Late November aligns with peak koyo (foliage)..." }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": { "input_tokens": 34, "output_tokens": 58 }
+}
+```
+
+<Callout type="tip">
+`content` is **always an array of blocks**, even for a plain text reply. A response may contain multiple blocks (e.g. a `text` block + one or more `tool_use` blocks). Never assume `content` is a string.
+</Callout>
+
+## System Prompt — placement, behavior, limits
+
+- Passed as the top-level `system` parameter (a string, or a list of text blocks for prompt caching).
+- Sets persona, rules, and constraints; it is **not** a turn and does **not** appear in `messages[]`.
+- There is **no `{"role": "system"}` message** — attempting one raises a validation error.
+- The system prompt counts toward **input tokens** (and can be cached to cut cost).
+
+## Role types & ordering rules
+
+| Role | Where it lives | Rules |
+|---|---|---|
+| `system` | Top-level `system` param | Optional; one per request; never in `messages[]` |
+| `user` | `messages[]` | Conversation **must start with `user`** |
+| `assistant` | `messages[]` | Claude's turns; you replay prior ones for multi-turn |
+
+- Roles **must alternate** `user → assistant → user → …`. Two consecutive same-role messages are invalid.
+- To **prefill** Claude's answer, end `messages[]` with a partial `assistant` message — Claude continues from it.
+
+## `stop_reason` reference
+
+| `stop_reason` | What triggered it | What you should do |
+|---|---|---|
+| `end_turn` | Claude finished naturally | Normal completion — use the output |
+| `max_tokens` | Hit your `max_tokens` cap | Output is **truncated**; raise cap or continue |
+| `stop_sequence` | Hit one of your `stop_sequences` | Check `stop_sequence` field for which one |
+| `tool_use` | Claude wants to call a tool | Execute tool, return `tool_result`, loop |
+| `pause_turn` | Long-running server tool paused | Continue the turn by sending the response back |
+| `refusal` | Model declined for safety | Handle gracefully; do not retry blindly |
+
+## Mental Model
+
+The Messages API is like **mailing a full printed transcript back and forth**. Claude has amnesia between calls — every letter you send must contain the *entire* conversation so far. The `system` prompt is the **standing instructions stapled to the front of every envelope**, not a line in the letter.
+
+## Common Traps
+
+<Callout type="trap" title="System role inside messages[]">
+**Misconception:** Pass the system prompt as `{"role": "system"}` inside `messages[]`.
+**Reality:** `system` is a TOP-LEVEL parameter. There is no system role in `messages[]`. The exam version shows a code snippet with a system-role message; spot the bug.
+</Callout>
+
+<Callout type="trap" title="Stateless API remembers context">
+**Misconception:** The API remembers the conversation, so I only send the newest user message.
+**Reality:** The API is STATELESS. You must replay the entire `messages[]` array each turn. A multi-turn app that "forgets" context is failing to resend history.
+</Callout>
+
+## Exam Tips
+
+- If a code sample includes a `system` role inside `messages[]`, it's **wrong** — the most common Messages-API trap.
+- `max_tokens` limits **output only** and is **required**. Any option implying it caps input, or has a default, is a distractor.
+- When asked "why did the app lose context," the answer is almost always **statelessness / not replaying history**.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario 1: The Forgetful Chatbot" prompt="A support bot answers the first question well but 'forgets' everything after that — each reply acts like a brand-new conversation. How do you make it maintain multi-turn context?">
+**Wrong approach:** Add "remember our conversation" to the system prompt. Fails — the model has no server-side memory to remember with.
+
+**Correct approach:** On every call, append the new user message to a persisted `messages[]` array (including all prior assistant replies) and send the whole thing. The array IS the memory. This tests understanding that the Messages API is stateless and the client owns the transcript.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario 2: The Truncated Report" prompt="A tool generates long financial summaries. Occasionally output cuts off mid-sentence with no error thrown. How do you detect and handle incomplete generations reliably?">
+**Wrong approach:** Assume any 200 OK response is complete and render it. Silent truncation ships broken reports.
+
+**Correct approach:** Inspect `stop_reason`. If `"max_tokens"`, the output is truncated — raise `max_tokens` or issue a continuation call, and never treat it as final. This tests `stop_reason` literacy, especially distinguishing `end_turn` from `max_tokens`.
+</RevealAnswer>
+
+## Quick-Recall
+
+<RevealAnswer title="Flashcard" prompt="Where does the system prompt go, and why can't it be a message?">
+Top-level `system` parameter. It's a standing instruction, not a conversational turn — the API has no `system` role in `messages[]`, so putting it there errors out.
+</RevealAnswer>
