@@ -4,13 +4,26 @@ import { StudyPlan } from "./StudyPlan";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import { blueprint } from "@content/blueprint";
 import { MAX_BOX } from "@/lib/srs";
-import type { Flashcard, Topic } from "@/lib/content-types";
+import type { Flashcard, QuizQuestion, Topic } from "@/lib/content-types";
 import type { DiagnosticAttempt } from "@/lib/diagnostic-history";
 
 const skillA = blueprint.domains[0].skills[0].id;
 
 const flashcards: Flashcard[] = [
   { id: "c1", topicId: "t1", question: "q", answer: "a", skillIds: [skillA] },
+];
+const questions: QuizQuestion[] = [
+  {
+    id: "q1",
+    question: "q",
+    options: [
+      { id: "a", text: "a" },
+      { id: "b", text: "b" },
+    ],
+    correctIds: ["a"],
+    explanations: { a: "ea", b: "eb" },
+    skillIds: [skillA],
+  },
 ];
 const topics: Topic[] = [
   {
@@ -48,7 +61,7 @@ describe("StudyPlan", () => {
       JSON.stringify([attempt])
     );
 
-    render(<StudyPlan flashcards={flashcards} topics={topics} />);
+    render(<StudyPlan flashcards={flashcards} topics={topics} questions={questions} />);
     expect(screen.getByRole("heading", { name: /today’s focus|today's focus/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Read: Topic One/i })).toBeInTheDocument();
   });
@@ -77,12 +90,12 @@ describe("StudyPlan", () => {
       })
     );
 
-    render(<StudyPlan flashcards={flashcards} topics={topics} />);
+    render(<StudyPlan flashcards={flashcards} topics={topics} questions={questions} />);
     expect(screen.getByText(/caught up/i)).toBeInTheDocument();
   });
 
   it("renders per-skill mastery with explanations", () => {
-    render(<StudyPlan flashcards={flashcards} topics={topics} />);
+    render(<StudyPlan flashcards={flashcards} topics={topics} questions={questions} />);
     expect(screen.getByRole("heading", { name: /skill mastery/i })).toBeInTheDocument();
     // With no data, the skill should read as unknown.
     expect(screen.getAllByText(/unknown/i).length).toBeGreaterThan(0);

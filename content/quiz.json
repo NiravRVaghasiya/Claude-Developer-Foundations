@@ -2118,5 +2118,149 @@
       "c": "Randomness doesn't prevent following injected instructions.",
       "d": "Model size doesn't remove the injection risk."
     }
+  },
+  {
+    "id": "q54",
+    "topicId": "agent-loop",
+    "skillIds": [
+      "d1-workflow-vs-agent"
+    ],
+    "difficulty": "advanced",
+    "cognitiveLevel": "analysis",
+    "status": "verified",
+    "evidence": [
+      {
+        "sourceType": "official",
+        "confidence": "high",
+        "source": "Anthropic — Building effective agents",
+        "url": "https://www.anthropic.com/engineering/building-effective-agents",
+        "verifiedOn": "2026-09-09"
+      }
+    ],
+    "question": "A team is deciding between a fixed workflow and an autonomous agent for a document-processing pipeline whose steps are the same every run but occasionally hit an unrecognized document type. What is the most defensible design?",
+    "options": [
+      {
+        "id": "a",
+        "text": "A workflow for the known, fixed steps, escalating only the unrecognized cases to an agent (or a human)"
+      },
+      {
+        "id": "b",
+        "text": "A fully autonomous agent for the whole pipeline so it can handle anything"
+      },
+      {
+        "id": "c",
+        "text": "A workflow with no fallback — reject any document that doesn't match a known step"
+      },
+      {
+        "id": "d",
+        "text": "Two agents racing each other and taking the first result"
+      }
+    ],
+    "correctIds": [
+      "a"
+    ],
+    "explanations": {
+      "a": "Correct. Predefined code paths are cheaper and more reliable for known steps; reserve model-directed autonomy for the genuinely open-ended cases, keeping most of the pipeline deterministic.",
+      "b": "Full autonomy adds cost and unpredictability to steps that are already fixed and don't need it.",
+      "c": "Rejecting unknown inputs fails the requirement to handle them; the open-ended case is exactly where flexibility is warranted.",
+      "d": "Racing agents multiplies cost and non-determinism without addressing the design question."
+    }
+  },
+  {
+    "id": "q55",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d1-agent-sdk"
+    ],
+    "difficulty": "core",
+    "cognitiveLevel": "application",
+    "status": "verified",
+    "evidence": [
+      {
+        "sourceType": "official",
+        "confidence": "high",
+        "source": "Anthropic — Claude Agent SDK overview",
+        "url": "https://code.claude.com/docs/en/agent-sdk/overview",
+        "verifiedOn": "2026-09-09"
+      }
+    ],
+    "question": "You want to embed the same agent behavior that Claude Code uses (tool use, context management, the agent loop) inside your own backend service. What is the most direct path?",
+    "options": [
+      {
+        "id": "a",
+        "text": "Shell out to the Claude Code CLI from your service and scrape its terminal output"
+      },
+      {
+        "id": "b",
+        "text": "Build on the Claude Agent SDK, which exposes those building blocks programmatically for your own agents"
+      },
+      {
+        "id": "c",
+        "text": "Re-implement the agent loop from scratch against the raw Messages API with no shared abstractions"
+      },
+      {
+        "id": "d",
+        "text": "Fine-tune a model so the loop is baked into the weights"
+      }
+    ],
+    "correctIds": [
+      "b"
+    ],
+    "explanations": {
+      "a": "Scraping CLI output is brittle and not the supported programmatic integration path.",
+      "b": "Correct. The Agent SDK gives you the same tools, context management, agent loop, and MCP building blocks the CLI uses, meant for building agents in your own code.",
+      "c": "Hand-rolling everything discards the tested building blocks the SDK already provides.",
+      "d": "Fine-tuning does not provide an agent loop or tool orchestration; that is an integration concern, not a weights concern."
+    }
+  },
+  {
+    "id": "q56",
+    "topicId": "security-safety",
+    "skillIds": [
+      "d7-guardrails"
+    ],
+    "difficulty": "advanced",
+    "cognitiveLevel": "analysis",
+    "status": "verified",
+    "evidence": [
+      {
+        "sourceType": "official",
+        "confidence": "high",
+        "source": "Anthropic — Reducing agent harm / guardrails",
+        "url": "https://platform.claude.com/docs/en/test-and-evaluate/strengthen-guardrails/reduce-hallucinations",
+        "verifiedOn": "2026-09-09",
+        "note": "Guardrail layering (least privilege, human-in-the-loop, isolation) is the general principle; specific page is representative."
+      }
+    ],
+    "question": "You are hardening an agent that can call a file-deletion tool and a payments tool. Which measures are genuine guardrails that reduce blast radius? (Select all that apply.)",
+    "options": [
+      {
+        "id": "a",
+        "text": "Scope each tool with least privilege so the agent only gets the narrow capabilities a task needs"
+      },
+      {
+        "id": "b",
+        "text": "Require human-in-the-loop approval before irreversible actions (deletion, payments)"
+      },
+      {
+        "id": "c",
+        "text": "Add a sentence to the system prompt asking the model to 'be careful' and rely on it as the control"
+      },
+      {
+        "id": "d",
+        "text": "Run high-risk tools with a deterministic hook that validates arguments before execution"
+      }
+    ],
+    "correctIds": [
+      "a",
+      "b",
+      "d"
+    ],
+    "explanations": {
+      "a": "Correct. Least privilege limits what the agent can do at all, shrinking the damage any single misstep can cause.",
+      "b": "Correct. Gating irreversible actions behind human approval is a core guardrail for high-consequence operations.",
+      "c": "A polite prompt request is a hope, not an enforceable control; it can be overridden and must not be relied on as the guardrail.",
+      "d": "Correct. A deterministic pre-execution hook validates or blocks dangerous calls regardless of the model's choices."
+    }
   }
 ]

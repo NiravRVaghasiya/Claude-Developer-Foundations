@@ -13,6 +13,7 @@ import type { Flashcard, QuizQuestion } from "@/lib/content-types";
 import { blueprint } from "@content/blueprint";
 import { allSkillIds, validateContentMappings } from "@/lib/blueprint";
 import { validateAll } from "@/lib/content-validation";
+import { planExamAllocation } from "@/lib/exam";
 import flashcards from "@content/flashcards.json";
 import quiz from "@content/quiz.json";
 
@@ -177,5 +178,34 @@ describe("strict content validation (validateAll)", () => {
     });
     // Surface the actual errors in the assertion message if any appear.
     expect(errors, errors.join("\n")).toEqual([]);
+  });
+});
+
+describe("full-length exam constructibility (shipped bank)", () => {
+  const itemCount = blueprint.format.items; // 53
+
+  it("has at least the official item count of questions available", () => {
+    expect(questions.length).toBeGreaterThanOrEqual(itemCount);
+  });
+
+  it("can construct a full blueprint-weighted 53-item exam totaling exactly 53", () => {
+    const plan = planExamAllocation(questions, blueprint, itemCount);
+    expect(plan.totalAvailable).toBeGreaterThanOrEqual(itemCount);
+    expect(plan.allocatedTotal).toBe(itemCount);
+  });
+
+  it("allocates every domain within one item of its weighted ideal (no drift)", () => {
+    const plan = planExamAllocation(questions, blueprint, itemCount);
+    for (const d of plan.domains) {
+      // Each domain should get at least floor(ideal) — i.e. no shortfall.
+      expect(d.shortfall, `${d.code} under-supplied`).toBe(0);
+    }
+    expect(plan.meetsBlueprint).toBe(true);
+  });
+
+  it("maps every question to a real blueprint domain (no unmapped)", () => {
+    const plan = planExamAllocation(questions, blueprint, itemCount);
+    const mapped = plan.domains.reduce((n, d) => n + d.available, 0);
+    expect(mapped).toBe(questions.length);
   });
 });

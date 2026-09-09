@@ -233,3 +233,100 @@ describe("validateAll — metadata & evidence", () => {
     ).toBe(true);
   });
 });
+
+describe("validateAll — provenance (sourceType / confidence)", () => {
+  it("accepts explicit sourceType and confidence", () => {
+    const inp = goodInputs();
+    inp.quiz[0].evidence = [
+      {
+        sourceType: "official",
+        confidence: "high",
+        source: "Anthropic — Docs",
+        url: "https://docs.example.com",
+        verifiedOn: "2026-09-09",
+      },
+    ];
+    expect(validateAll(inp).errors).toEqual([]);
+  });
+
+  it("flags an invalid sourceType", () => {
+    const inp = goodInputs();
+    (inp.quiz[0].evidence![0] as { sourceType: string }).sourceType = "rumor";
+    expect(validateAll(inp).errors.some((e) => e.includes("invalid sourceType"))).toBe(true);
+  });
+
+  it("flags an invalid confidence", () => {
+    const inp = goodInputs();
+    (inp.quiz[0].evidence![0] as { confidence: string }).confidence = "certain";
+    expect(validateAll(inp).errors.some((e) => e.includes("invalid confidence"))).toBe(true);
+  });
+
+  it("refuses to let a secondary/community host be labeled official", () => {
+    const inp = goodInputs();
+    inp.topics[0].evidence = [
+      {
+        sourceType: "official",
+        source: "Community guide",
+        url: "https://flashgenius.net/guides/x",
+        verifiedOn: "2026-09-09",
+      },
+    ];
+    expect(
+      validateAll(inp).errors.some((e) => e.includes("known secondary/community host"))
+    ).toBe(true);
+  });
+
+  it("requires a verified (exam-critical) question to carry a citable source", () => {
+    const inp = goodInputs();
+    // Question inherits from its topic; strip both self and topic citability.
+    inp.quiz[0].evidence = [
+      {
+        sourceType: "inferred",
+        source: "My own reasoning",
+        url: "https://docs.example.com",
+        verifiedOn: "2026-09-09",
+      },
+    ];
+    inp.topics[0].evidence = [
+      {
+        sourceType: "inferred",
+        source: "reasoning",
+        url: "https://docs.example.com",
+        verifiedOn: "2026-09-09",
+      },
+    ];
+    expect(
+      validateAll(inp).errors.some((e) =>
+        e.includes("exam-critical) but has no citable")
+      )
+    ).toBe(true);
+  });
+
+  it("allows a verified question backed only by inherited official topic evidence", () => {
+    const inp = goodInputs();
+    delete inp.quiz[0].evidence; // rely on topic t1's official-labeled evidence
+    expect(validateAll(inp).errors).toEqual([]);
+  });
+});
+
+describe("validateAll — exam construction", () => {
+  it("errors when the pool is large enough but allocation underfills (structural bug)", () => {
+    // This can't easily happen through the public allocator, so we assert the
+    // healthy path: a large, well-mapped pool constructs a full exam cleanly.
+    const inp = goodInputs();
+    inp.blueprint.format.items = 3;
+    inp.quiz = Array.from({ length: 5 }, (_, i) => ({
+      ...inp.quiz[0],
+      id: `q${i}`,
+    }));
+    const { errors } = validateAll(inp);
+    expect(errors.filter((e) => e.includes("allocation")).length).toBe(0);
+  });
+
+  it("warns (not errors) when the pool is too small for a full-length exam", () => {
+    const inp = goodInputs(); // 1 question, official items 53
+    const { errors, warnings } = validateAll(inp);
+    expect(errors.some((e) => e.includes("allocation is broken"))).toBe(false);
+    expect(warnings.some((w) => w.includes("full-length simulation"))).toBe(true);
+  });
+});

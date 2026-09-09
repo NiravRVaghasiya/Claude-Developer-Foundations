@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import type { Flashcard } from "@/lib/content-types";
+import type { Flashcard, QuizQuestion } from "@/lib/content-types";
 import type { Topic } from "@/lib/content-types";
 import { blueprint } from "@content/blueprint";
 import { useLocalStorage } from "@/lib/useLocalStorage";
@@ -15,6 +15,10 @@ import { buildStudyPlan } from "@/lib/study-plan";
 import type { SkillScore } from "@/lib/diagnostic";
 import type { DiagnosticAttempt } from "@/lib/diagnostic-history";
 import { latestAttempt } from "@/lib/diagnostic-history";
+import {
+  summarizePerformance,
+  type QuestionAttempt,
+} from "@/lib/question-attempts";
 
 const LEVEL_TONE: Record<string, string> = {
   unknown: "text-neutral-500",
@@ -27,9 +31,11 @@ const LEVEL_TONE: Record<string, string> = {
 export function StudyPlan({
   flashcards,
   topics,
+  questions,
 }: {
   flashcards: Flashcard[];
   topics: Topic[];
+  questions: QuizQuestion[];
 }) {
   const [schedule, , schedHydrated] = useLocalStorage<ScheduleMap>(
     STORAGE_KEYS.flashcardSchedule,
@@ -38,6 +44,10 @@ export function StudyPlan({
   const [marks] = useLocalStorage<FlashcardMarks>(STORAGE_KEYS.flashcardMarks, {});
   const [history] = useLocalStorage<DiagnosticAttempt[]>(
     STORAGE_KEYS.diagnosticHistory,
+    []
+  );
+  const [attempts] = useLocalStorage<QuestionAttempt[]>(
+    STORAGE_KEYS.questionAttempts,
     []
   );
 
@@ -78,15 +88,33 @@ export function StudyPlan({
       }
     }
 
+    // Error-driven remediation signal from real question attempts:
+    // per-skill current miss streak (recently missed) drives a priority boost
+    // and a targeted-practice recommendation.
+    const perf = summarizePerformance(attempts);
+    const recentMissesBySkill = new Map<string, number>();
+    for (const [skillId, sp] of perf.bySkill) {
+      if (sp.currentMissStreak > 0) recentMissesBySkill.set(skillId, sp.currentMissStreak);
+    }
+    // How many practice questions exist per skill (for the "N targeted questions").
+    const practiceQuestionsBySkill = new Map<string, number>();
+    for (const q of questions) {
+      for (const sid of q.skillIds ?? []) {
+        practiceQuestionsBySkill.set(sid, (practiceQuestionsBySkill.get(sid) ?? 0) + 1);
+      }
+    }
+
     const plan = buildStudyPlan({
       blueprint,
       mastery,
       overdueBySkill,
       topics,
+      recentMissesBySkill,
+      practiceQuestionsBySkill,
     });
 
     return { mastery, plan };
-  }, [history, marks, schedule, flashcards, topics]);
+  }, [history, marks, schedule, flashcards, topics, attempts, questions]);
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -133,25 +161,40 @@ export function StudyPlan({
                       {item.reason}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-3 text-sm">
-                      {item.actions.map((a, ai) =>
-                        a.kind === "read" ? (
+                      {item.actions.map((a, ai) => {
+                        if (a.kind === "read") {
+                          return (
+                            <Link
+                              key={ai}
+                              href={`/topics/${a.topicSlug}`}
+                              className="font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
+                            >
+                              Read: {a.topicTitle}
+                            </Link>
+                          );
+                        }
+                        if (a.kind === "drill") {
+                          return (
+                            <Link
+                              key={ai}
+                              href="/flashcards"
+                              className="font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
+                            >
+                              Drill {a.dueCount} due card{a.dueCount === 1 ? "" : "s"}
+                            </Link>
+                          );
+                        }
+                        return (
                           <Link
                             key={ai}
-                            href={`/topics/${a.topicSlug}`}
+                            href="/quiz"
                             className="font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
                           >
-                            Read: {a.topicTitle}
+                            Practice {a.questionCount} targeted question
+                            {a.questionCount === 1 ? "" : "s"}
                           </Link>
-                        ) : (
-                          <Link
-                            key={ai}
-                            href="/flashcards"
-                            className="font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
-                          >
-                            Drill {a.dueCount} due card{a.dueCount === 1 ? "" : "s"}
-                          </Link>
-                        )
-                      )}
+                        );
+                      })}
                     </div>
                   </li>
                 ))}

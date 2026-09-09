@@ -88,10 +88,15 @@ describe("integration: diagnostic → study plan", () => {
 
     // 2) The study plan (REAL mastery + plan engines) reflects the weak skill B,
     //    recommending its teaching topic.
-    render(<StudyPlan flashcards={flashcards} topics={topics} />);
+    render(<StudyPlan flashcards={flashcards} topics={topics} questions={questions} />);
     expect(
       screen.getByRole("heading", { name: /today’s focus|today's focus/i })
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Read: The B Topic/i })).toBeInTheDocument();
+    // Error-driven remediation: the recently-missed skill B also gets a
+    // targeted-practice action sourced from the persisted question attempts.
+    expect(
+      screen.getByRole("link", { name: /Practice \d+ targeted question/i })
+    ).toBeInTheDocument();
   });
 });

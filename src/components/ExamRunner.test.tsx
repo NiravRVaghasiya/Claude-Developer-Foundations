@@ -84,6 +84,56 @@ describe("ExamRunner", () => {
     expect(window.localStorage.getItem(STORAGE_KEYS.examSession)).toBe("null");
   });
 
+  it("surfaces actionable remediation and records question attempts on submit", () => {
+    // A topic that teaches skillA so the weak-skill recommendation can link it.
+    const withTopic: Topic[] = [
+      {
+        id: "topic-a",
+        slug: "topic-a",
+        title: "The A Topic",
+        summary: "",
+        domain: "Applications & Integration",
+        file: "topic-a.mdx",
+        source: "CCDV-F Study Notes.md",
+        order: 1,
+        skillIds: [skillA],
+      },
+    ];
+    render(<ExamRunner questions={questions} topics={withTopic} />);
+    fireEvent.click(screen.getByRole("button", { name: /^start exam$/i }));
+
+    // Answer the current question WRONG (pick the "Wrong" option), then submit.
+    const wrong = screen
+      .getAllByRole("button", { pressed: false })
+      .find((b) => /Wrong\s/.test(b.textContent ?? ""))!;
+    fireEvent.click(wrong);
+    fireEvent.click(screen.getByRole("button", { name: /submit exam now/i }));
+
+    // Remediation section is present and links the weak skill's topic + practice.
+    const remediation = screen
+      .getByRole("heading", { name: /what to focus on next/i })
+      .closest("section") as HTMLElement;
+    expect(remediation).toBeInTheDocument();
+    expect(
+      within(remediation).getByRole("link", { name: /The A Topic/i })
+    ).toBeInTheDocument();
+    expect(
+      within(remediation).getByRole("link", { name: /practice questions/i })
+    ).toBeInTheDocument();
+
+    // Per-question attempts were recorded locally (no PII, just outcomes).
+    const raw = window.localStorage.getItem(STORAGE_KEYS.questionAttempts);
+    expect(raw).not.toBeNull();
+    const attempts = JSON.parse(raw as string) as Array<{
+      questionId: string;
+      correct: boolean;
+      source: string;
+    }>;
+    expect(attempts.length).toBeGreaterThanOrEqual(1);
+    expect(attempts.every((a) => a.source === "exam")).toBe(true);
+    expect(attempts.some((a) => a.correct === false)).toBe(true);
+  });
+
   it("offers to resume an active saved session", () => {
     const now = Date.now();
     const session: ExamSession = {

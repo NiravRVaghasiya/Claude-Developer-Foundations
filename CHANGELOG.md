@@ -7,8 +7,34 @@ application, content, and exam blueprint independently — see
 
 ## [Unreleased]
 
+### Added
+
+- **Explicit provenance tiers.** `Evidence` now carries `sourceType`
+  (`official | secondary | inferred`) and `confidence`. Validation rejects invalid
+  tiers, refuses to label a known secondary/community host `official`, and requires
+  every `status: "verified"` (exam-critical) question to be backed by a citable
+  official/secondary source. The blueprint source is tagged `secondary`.
+- **Deterministic blueprint-weighted exam allocation + drift detection**
+  (`planExamAllocation` in `src/lib/exam.ts`): per-domain ideal/available/
+  allocated/shortfall over all 8 domains, capped by availability. `validate:content`
+  now hard-fails if the shipped bank cannot build a full 53-item exam.
+- **Local, PII-free per-question analytics** (`src/lib/question-attempts.ts` +
+  `STORAGE_KEYS.questionAttempts`): records graded outcomes only and derives
+  overall/domain/skill accuracy, repeated-error rate, recency, and average
+  response time.
+- **Error-driven remediation** in the study plan: recently-missed skills (from the
+  attempt log) get a bounded priority boost, a targeted "practice N questions"
+  action, and an explainable reason. Exam and diagnostic submits record attempts.
+- **Exam results remediation block** — "What to focus on next" maps weak skills to
+  topics and targeted practice; the simulator is now labeled a full-length
+  **"53-Question CCDV-F Practice Simulation"**.
+
 ### Content
 
+- **Bank rebalanced to blueprint targets.** Added original scenario questions
+  (`q54`–`q56`) so under-supplied domains meet their weighted ideal (D1 6→8, D7
+  3→4) and added a second multiple-response item. Bank is now **56 questions**; a
+  full 53-item blueprint-weighted exam allocates every domain with 0 drift.
 - **Full blueprint coverage.** Every one of the 29 blueprint skills now carries
   both learning content and assessment; `validate:content` reports 0 coverage
   warnings (was 7).

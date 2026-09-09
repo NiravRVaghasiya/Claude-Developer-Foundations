@@ -10,6 +10,7 @@ import {
   validateBlueprint,
   validateContentMappings,
 } from "@/lib/blueprint";
+import { planExamAllocation } from "@/lib/exam";
 
 /**
  * Strict, pure content validation for the whole content set. Runs in both the
@@ -32,6 +33,8 @@ export interface ValidationResult {
 const DIFFICULTIES = new Set(["intro", "core", "advanced"]);
 const COGNITIVE_LEVELS = new Set(["recall", "application", "analysis"]);
 const STATUSES = new Set(["verified", "needs-review"]);
+const SOURCE_TYPES = new Set(["official", "secondary", "inferred"]);
+const CONFIDENCES = new Set(["high", "medium", "low"]);
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
@@ -49,6 +52,16 @@ export function isUrlish(v: unknown): v is string {
   return typeof v === "string" && /^https:\/\/[^\s]+$/.test(v);
 }
 
+/**
+ * Effective source tier for an evidence entry. Legacy entries without an
+ * explicit `sourceType` are inferred: a label beginning with "Anthropic —"
+ * is treated as official; anything else as secondary. Prefer explicit tiers.
+ */
+export function effectiveSourceType(e: Evidence): "official" | "secondary" | "inferred" {
+  if (e.sourceType) return e.sourceType;
+  return /^anthropic\s*[—-]/i.test(e.source) ? "official" : "secondary";
+}
+
 /** Validate an evidence array for a unit; returns error strings. */
 function checkEvidence(label: string, evidence: Evidence[] | undefined): string[] {
   const errors: string[] = [];
@@ -58,8 +71,33 @@ function checkEvidence(label: string, evidence: Evidence[] | undefined): string[
     if (!isNonEmptyString(e.source)) errors.push(`${at} has empty source`);
     if (!isUrlish(e.url)) errors.push(`${at} has non-https/invalid url: ${String(e.url)}`);
     if (!isIsoDate(e.verifiedOn)) errors.push(`${at} has invalid verifiedOn: ${String(e.verifiedOn)}`);
+    if (e.sourceType !== undefined && !SOURCE_TYPES.has(e.sourceType)) {
+      errors.push(`${at} has invalid sourceType: ${String(e.sourceType)}`);
+    }
+    if (e.confidence !== undefined && !CONFIDENCES.has(e.confidence)) {
+      errors.push(`${at} has invalid confidence: ${String(e.confidence)}`);
+    }
+    // Provenance honesty: a source explicitly declared "official" must not be a
+    // known secondary/community host, and a source that reads as an Anthropic
+    // first-party doc must not be labeled "secondary" (that would understate,
+    // which is safe) — we only fail the DANGEROUS direction: secondary dressed
+    // as official.
+    if (e.sourceType === "official" && isSecondaryHost(e.url)) {
+      errors.push(
+        `${at} is labeled sourceType:"official" but its URL is a known secondary/community host: ${e.url}`
+      );
+    }
   });
   return errors;
+}
+
+/** Hosts we treat as secondary/community (never "official" Anthropic sources). */
+const SECONDARY_HOST_RE =
+  /^https:\/\/(?:[^/]*\.)?(flashgenius\.net|huggingface\.co|medium\.com|github\.io|reddit\.com|youtube\.com|substack\.com)\b/i;
+
+/** True when a URL points at a known secondary/community host. */
+export function isSecondaryHost(url: string): boolean {
+  return SECONDARY_HOST_RE.test(url);
 }
 
 /** Shared metadata checks (difficulty/cognitiveLevel/status/evidence + verified⇒evidence). */
@@ -167,7 +205,8 @@ function checkQuestions(
   quiz: QuizQuestion[],
   validSkills: Set<string>,
   topicsWithEvidence: Set<string>,
-  topicIds: Set<string>
+  topicIds: Set<string>,
+  topicsWithCitableEvidence: Set<string>
 ): string[] {
   const errors: string[] = [];
   errors.push(...checkDuplicateIds("question", quiz.map((q) => q.id)));
@@ -205,8 +244,63 @@ function checkQuestions(
     errors.push(
       ...checkMetadata(label, q, { allowCognitive: true, evidenceInherited: inherited })
     );
+
+    // Exam-critical provenance: a question asserted as "verified" (used in the
+    // graded exam simulation) must be backed by at least one citable source —
+    // official or secondary — either its own evidence or an inherited topic's.
+    // "inferred"-only or unsourced verified questions are not allowed.
+    if (q.status === "verified") {
+      const selfCitable = (q.evidence ?? []).some(
+        (e) => effectiveSourceType(e) !== "inferred"
+      );
+      const inheritedCitable =
+        q.topicId !== undefined && topicsWithCitableEvidence.has(q.topicId);
+      if (!selfCitable && !inheritedCitable) {
+        errors.push(
+          `${label} is status:verified (exam-critical) but has no citable (official/secondary) evidence, self or inherited`
+        );
+      }
+    }
   }
   return errors;
+}
+
+/**
+ * Exam-construction check: can a full blueprint-weighted exam of the official
+ * item count actually be built from the pool? Errors when the pool is too small
+ * to fill the official item count; WARNS when a domain is under-supplied
+ * relative to its ideal (blueprint drift) but the exam can still be assembled.
+ */
+export function checkExamConstruction(
+  blueprint: Blueprint,
+  quiz: QuizQuestion[]
+): { errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const itemCount = blueprint.format.items;
+  const plan = planExamAllocation(quiz, blueprint, itemCount);
+
+  if (plan.totalAvailable < itemCount) {
+    // Not enough questions to run a FULL-length simulation. Surfaced as a
+    // warning here (the pure validator is used with arbitrary inputs, including
+    // tiny fixtures); the shipped bank is hard-asserted to reach the full count
+    // by a dedicated content test and the validate:content runner below.
+    warnings.push(
+      `exam pool has only ${plan.totalAvailable} of ${itemCount} questions needed for a full-length simulation`
+    );
+  } else if (plan.allocatedTotal < itemCount) {
+    // The pool is large enough but the allocator failed to fill it — a real
+    // structural bug, so this is a hard error.
+    errors.push(
+      `exam allocation only filled ${plan.allocatedTotal}/${itemCount} slots — allocation is broken`
+    );
+  }
+  // Domain under-supply is drift; surface it as a warning (tiny domains
+  // legitimately round to a smaller share than a strict floor).
+  for (const note of plan.notes) {
+    if (!note.includes("pool has only")) warnings.push(`exam allocation drift: ${note}`);
+  }
+  return { errors, warnings };
 }
 
 /** Validate the entire content set. Errors fail the gate; warnings are informational. */
@@ -232,14 +326,30 @@ export function validateAll(input: ValidationInputs): ValidationResult {
   const topicsWithEvidence = new Set(
     topics.filter((t) => (t.evidence?.length ?? 0) > 0).map((t) => t.id)
   );
+  // Topics whose evidence includes at least one citable (official/secondary)
+  // source — the tier a verified exam question is allowed to inherit.
+  const topicsWithCitableEvidence = new Set(
+    topics
+      .filter((t) =>
+        (t.evidence ?? []).some((e) => effectiveSourceType(e) !== "inferred")
+      )
+      .map((t) => t.id)
+  );
 
   errors.push(...checkTopics(topics, validSkills));
   errors.push(...checkFlashcards(flashcards, validSkills, topicsWithEvidence, topicIds));
-  errors.push(...checkQuestions(quiz, validSkills, topicsWithEvidence, topicIds));
+  errors.push(
+    ...checkQuestions(quiz, validSkills, topicsWithEvidence, topicIds, topicsWithCitableEvidence)
+  );
+
+  // Exam construction: the pool must be able to build a full blueprint-weighted
+  // exam of the official item count. Hard errors fail the gate; drift warns.
+  const construction = checkExamConstruction(blueprint, quiz);
+  errors.push(...construction.errors);
 
   // Coverage warnings from the blueprint mapping layer (non-fatal).
   const mapping = validateContentMappings({ bp: blueprint, topics, flashcards, quiz });
-  const warnings = mapping.warnings;
+  const warnings = [...mapping.warnings, ...construction.warnings];
 
   return { errors, warnings };
 }

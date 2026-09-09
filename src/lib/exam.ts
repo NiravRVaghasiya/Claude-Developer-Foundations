@@ -150,6 +150,118 @@ function allocateSlots(
   return result;
 }
 
+// ---- Blueprint allocation planning + drift detection --------------------------
+
+export interface DomainAllocation {
+  domainId: string;
+  code: string;
+  title: string;
+  weight: number;
+  /** Ideal count by pure weight (weight/100 * itemCount), for reference. */
+  ideal: number;
+  /** Questions available in the pool for this domain. */
+  available: number;
+  /** Deterministically allocated slots for this exam. */
+  allocated: number;
+  /** ideal - allocated when the domain is under-served by the pool (>0), else 0. */
+  shortfall: number;
+}
+
+export interface ExamAllocationPlan {
+  itemCount: number;
+  totalAvailable: number;
+  domains: DomainAllocation[];
+  /** Sum of allocated slots (should equal min(itemCount, totalAvailable)). */
+  allocatedTotal: number;
+  /** True when every blueprint domain got at least its rounded-down ideal. */
+  meetsBlueprint: boolean;
+  /** Human-readable drift notes (under-supplied domains, total shortfall). */
+  notes: string[];
+}
+
+/**
+ * Deterministically plan how a blueprint-weighted exam of `itemCount` items
+ * would be allocated across ALL blueprint domains, given the available pool.
+ * Pure and independent of any seed — this is the allocation contract the
+ * assembler follows, exposed for validation and tests (drift detection).
+ */
+export function planExamAllocation(
+  questions: QuizQuestion[],
+  blueprint: Blueprint,
+  itemCount: number
+): ExamAllocationPlan {
+  const skillToDomain = new Map<string, string>();
+  for (const d of blueprint.domains)
+    for (const sk of d.skills) skillToDomain.set(sk.id, d.id);
+
+  const availableByDomain = new Map<string, number>();
+  for (const d of blueprint.domains) availableByDomain.set(d.id, 0);
+  for (const q of questions) {
+    const dom = domainOfQuestion(q, skillToDomain);
+    if (availableByDomain.has(dom)) {
+      availableByDomain.set(dom, (availableByDomain.get(dom) ?? 0) + 1);
+    }
+  }
+
+  const totalAvailable = [...availableByDomain.values()].reduce((n, v) => n + v, 0);
+  const target = Math.min(itemCount, totalAvailable);
+
+  // Allocate over ALL blueprint domains (weight-driven), capped by availability.
+  const weights = blueprint.domains.map((d) => ({
+    key: d.id,
+    weight: d.weight,
+    cap: availableByDomain.get(d.id) ?? 0,
+  }));
+  const slots = allocateSlots(weights, target);
+
+  const weightSum = blueprint.domains.reduce((n, d) => n + d.weight, 0) || 1;
+  const notes: string[] = [];
+  let meetsBlueprint = true;
+
+  const domains: DomainAllocation[] = blueprint.domains.map((d) => {
+    const ideal = (d.weight / weightSum) * itemCount;
+    const available = availableByDomain.get(d.id) ?? 0;
+    const allocated = slots.get(d.id) ?? 0;
+    // Under-served when the pool can't supply this domain's floor of ideal.
+    const shortfall = Math.max(0, Math.floor(ideal) - allocated);
+    if (shortfall > 0) {
+      meetsBlueprint = false;
+      notes.push(
+        `${d.code} ${d.title}: allocated ${allocated} of ~${ideal.toFixed(
+          1
+        )} ideal (only ${available} available) — under-supplied by ${shortfall}`
+      );
+    }
+    return {
+      domainId: d.id,
+      code: d.code,
+      title: d.title,
+      weight: d.weight,
+      ideal: Math.round(ideal * 10) / 10,
+      available,
+      allocated,
+      shortfall,
+    };
+  });
+
+  const allocatedTotal = domains.reduce((n, d) => n + d.allocated, 0);
+  if (totalAvailable < itemCount) {
+    notes.push(
+      `pool has only ${totalAvailable} questions but a full exam needs ${itemCount}`
+    );
+    meetsBlueprint = false;
+  }
+
+  return {
+    itemCount,
+    totalAvailable,
+    domains,
+    allocatedTotal,
+    meetsBlueprint,
+    notes,
+  };
+}
+
 /**
  * Assemble a seeded, blueprint-weighted exam. Deterministic for a given seed.
  * Never duplicates a question; caps at pool size.

@@ -14,4 +14,6 @@ export const STORAGE_KEYS = {
   diagnosticHistory: "ccdvf:diagnostic-history",
   /** ExamSession | null — the in-progress exam simulation (autosaved). */
   examSession: "ccdvf:exam-session",
+  /** QuestionAttempt[] — capped, newest-first log of graded question attempts. */
+  questionAttempts: "ccdvf:question-attempts",
 } as const;

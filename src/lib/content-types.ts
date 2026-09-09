@@ -35,13 +35,33 @@ export type CognitiveLevel = "recall" | "application" | "analysis";
  * A single sourced evidence entry backing a factual claim. Provenance is
  * mandatory for the platform's trustworthiness; see the Phase 01 claims ledger.
  */
+/**
+ * How authoritative a source is, for honest provenance labeling:
+ * - "official": a first-party Anthropic doc / product page.
+ * - "secondary": a community/third-party source that cites or corroborates.
+ * - "inferred": a reasoned conclusion not directly stated by a single source.
+ * NEVER label a secondary/community source "official".
+ */
+export type SourceType = "official" | "secondary" | "inferred";
+
+/** How confident we are that the cited source supports the claim. */
+export type SourceConfidence = "high" | "medium" | "low";
+
 export interface Evidence {
+  /**
+   * Provenance tier. Optional for back-compat; when omitted it is treated as
+   * "official" for legacy entries whose `source` begins with "Anthropic —".
+   * Prefer setting it explicitly.
+   */
+  sourceType?: SourceType;
   /** Human-readable source label, e.g. "Anthropic — Prompt caching". */
   source: string;
   /** Canonical URL of the authoritative source. */
   url: string;
   /** ISO date (YYYY-MM-DD) the claim was verified against the source. */
   verifiedOn: string;
+  /** Confidence that the source actually supports the claim. */
+  confidence?: SourceConfidence;
   /** Optional clarifying note (e.g. which figure/behavior this supports). */
   note?: string;
 }

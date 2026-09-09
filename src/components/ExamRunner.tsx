@@ -18,6 +18,7 @@ import {
   type ExamItem,
   type ExamAnalysis,
 } from "@/lib/exam";
+import { rankWeaknesses, recommendTopics } from "@/lib/diagnostic";
 import {
   answeredCount,
   flaggedCount,
@@ -26,6 +27,11 @@ import {
 } from "@/lib/exam-session";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
+import {
+  appendAttempts,
+  buildAttempts,
+  type QuestionAttempt,
+} from "@/lib/question-attempts";
 
 type Phase = "idle" | "active" | "results";
 
@@ -49,6 +55,10 @@ export function ExamRunner({
   const [session, setSession, hydrated] = useLocalStorage<ExamSession | null>(
     STORAGE_KEYS.examSession,
     null
+  );
+  const [, setAttempts] = useLocalStorage<QuestionAttempt[]>(
+    STORAGE_KEYS.questionAttempts,
+    []
   );
   const [phase, setPhase] = useState<Phase>("idle");
   const [index, setIndex] = useState(0);
@@ -95,10 +105,19 @@ export function ExamRunner({
       blueprint,
       cutScorePct: session.config.cutScorePct,
     });
+    // Record per-question attempts locally for error-driven remediation.
+    const answered = buildAttempts({
+      questions: items.map((it) => it.question),
+      answers: session.answers,
+      blueprint,
+      source: "exam",
+      now: Date.now(),
+    });
+    if (answered.length > 0) setAttempts((prev) => appendAttempts(prev, answered));
     setAnalysis(result);
     setPhase("results");
     setSession(null); // clear the in-progress session
-  }, [session, items, setSession]);
+  }, [session, items, setSession, setAttempts]);
 
   // Countdown tick + timeout auto-submit.
   const submitRef = useRef(submit);
@@ -210,10 +229,14 @@ export function ExamRunner({
     const resumable = session && isSessionActive(session, Date.now());
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
-        <h1 className="text-3xl font-bold tracking-tight">Exam Simulator</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {config.scaled
+            ? "Practice Exam Simulation"
+            : `${config.itemCount}-Question CCDV-F Practice Simulation`}
+        </h1>
         <p className="mt-2 text-neutral-600 dark:text-neutral-400">
-          A timed, no-feedback practice simulation. You won&rsquo;t see whether an
-          answer is right until you finish.
+          A timed, no-feedback practice simulation built from original study
+          questions. You won&rsquo;t see whether an answer is right until you finish.
         </p>
 
         {config.scaled ? (
@@ -224,7 +247,15 @@ export function ExamRunner({
             time scaled proportionally ({fmtTime(config.timeLimitMs)}). It is a study
             aid, not a prediction of passing the real exam.
           </div>
-        ) : null}
+        ) : (
+          <div className="mt-4 rounded-lg border border-amber-300/60 bg-amber-50 p-4 text-sm dark:border-amber-500/30 dark:bg-amber-950/30">
+            <strong>Full-length practice simulation.</strong> This mirrors the
+            official CCDV-F format ({config.officialItems} questions in{" "}
+            {config.officialMinutes} minutes) using original, blueprint-weighted
+            practice questions. It is a study aid — not the actual Anthropic exam
+            and not a prediction of passing it.
+          </div>
+        )}
 
         <ul className="mt-4 space-y-1 text-sm text-neutral-600 dark:text-neutral-400">
           <li>• {config.itemCount} questions · {fmtTime(config.timeLimitMs)} time limit</li>
@@ -436,12 +467,24 @@ function ExamResults({
   topics: Topic[];
   onRestart: () => void;
 }) {
-  const topicBySlugForSkill = useMemo(() => topics, [topics]);
-  void topicBySlugForSkill;
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
+
+  const topicTitleBySlug = useMemo(
+    () => new Map(topics.map((t) => [t.slug, t.title])),
+    [topics]
+  );
+
+  // Actionable remediation: rank assessed skills weakest-first, then map the
+  // weakest few to the topics that teach them (reuses the diagnostic engine).
+  const recommendations = useMemo(() => {
+    const weaknesses = rankWeaknesses(analysis.skills, blueprint)
+      .filter((s) => (s.pct ?? 100) < 100)
+      .slice(0, 5);
+    return recommendTopics(weaknesses, topics);
+  }, [analysis.skills, topics]);
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
@@ -494,6 +537,78 @@ function ExamResults({
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="mt-8" aria-labelledby="exam-remediation-heading">
+        <h2 id="exam-remediation-heading" className="mb-3 text-lg font-semibold">
+          What to focus on next
+        </h2>
+        {recommendations.length === 0 ? (
+          <p className="text-sm text-neutral-500">
+            No weak skills stood out on this attempt. Keep reviewing and take a{" "}
+            <Link
+              href="/diagnostic"
+              className="font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
+            >
+              diagnostic
+            </Link>{" "}
+            to confirm.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {recommendations.map((r) => (
+              <li
+                key={r.skillId}
+                className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="font-medium">{r.title}</span>
+                  <span className="text-sm text-neutral-500">
+                    {r.pct === null ? "" : `${r.pct}%`}
+                  </span>
+                </div>
+                {r.topicSlugs.length > 0 ? (
+                  <p className="mt-1 text-sm">
+                    Review:{" "}
+                    {r.topicSlugs.map((slug, i) => (
+                      <span key={slug}>
+                        {i > 0 ? ", " : ""}
+                        <Link
+                          href={`/topics/${slug}`}
+                          className="font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
+                        >
+                          {topicTitleBySlug.get(slug) ?? slug}
+                        </Link>
+                      </span>
+                    ))}
+                    , then re-drill with targeted{" "}
+                    <Link
+                      href="/quiz"
+                      className="font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
+                    >
+                      practice questions
+                    </Link>
+                    .
+                  </p>
+                ) : (
+                  <p className="mt-1 text-sm text-neutral-500">
+                    {r.note ?? "Review this skill and re-practice."}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-sm">
+          Your personalized{" "}
+          <Link
+            href="/plan"
+            className="font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
+          >
+            study plan
+          </Link>{" "}
+          now reflects the skills you missed here.
+        </p>
       </section>
 
       <section className="mt-8" aria-labelledby="exam-review-heading">

@@ -13,8 +13,9 @@ The platform supports a full study loop, all client-side:
 3. **Learn** — read verified, sourced topic pages mapped to the exam blueprint.
 4. **Practice** — drill flashcards (spaced repetition) and a scored practice quiz.
 5. **Review** — see per-option explanations and per-skill mastery with reasons.
-6. **Simulate** — take a timed, no-feedback exam simulation with post-exam analysis.
-7. **Track readiness** — a study-readiness estimate (never a pass-probability claim).
+6. **Simulate** — take a full-length, timed, no-feedback **53-question practice simulation** with post-exam analysis and actionable remediation.
+7. **Remediate** — after any quiz, diagnostic, or exam, weak/recently-missed skills flow back into the study plan as targeted "read → practice" actions.
+8. **Track readiness** — a study-readiness estimate (never a pass-probability claim).
 
 ## Features
 
@@ -23,9 +24,11 @@ The platform supports a full study loop, all client-side:
 - **Practice quiz** — single- and multiple-response questions, instant scoring, per-option explanations.
 - **Diagnostic assessment** — per-domain/skill scoring, weaknesses, recommendations, and a study-readiness estimate.
 - **Adaptive study plan** — explainable per-skill mastery and a prioritized daily plan.
-- **Exam simulator** — a separate, timed, no-feedback simulation with navigation, flagging, autosave/resume, timeout auto-submit, and detailed analysis.
+- **Exam simulator** — a full-length **53-question CCDV-F practice simulation** whose questions are deterministically allocated across the 8 blueprint domains **by their official weights**, with navigation, flagging, autosave/resume, timeout auto-submit, detailed per-domain/skill analysis, and a "what to focus on next" remediation block. Explicitly a practice aid, not the real Anthropic exam.
+- **Error-driven remediation** — a local, PII-free per-question attempt log feeds the study plan so recently-missed skills are surfaced with targeted practice.
+- **Local performance analytics** — overall/domain/skill accuracy, repeated-error rate, recent performance, and average response time, derived entirely on-device.
 - **Progress dashboard**, **full-text search**, **dark mode**, and a responsive, accessible layout.
-- **No backend, no login** — all progress lives in `localStorage`.
+- **No backend, no login, no analytics service** — all progress lives in `localStorage`; a single "Reset all progress" action clears every key, including the attempt log.
 
 > Every topic, flashcard, and question maps to a structured, sourced exam
 > **blueprint** (`content/blueprint.ts`). Content is original study material with
@@ -83,7 +86,18 @@ fails the build.
 
 > `validate:content` runs the TypeScript validator directly with **Bun**
 > (`bun scripts/validate-content.ts`), which the project already uses as its
-> runtime/lockfile (`bun.lock`).
+> runtime/lockfile (`bun.lock`). The runner also hard-fails if the shipped
+> question bank cannot construct a full 53-item blueprint-weighted exam.
+
+## Local data & privacy
+
+All learner data is stored **only in your browser's `localStorage`** — there is
+no backend, no account, and no third-party analytics. The per-question analytics
+that power remediation record **only graded outcomes** (question id, correct/
+incorrect, optional response time, and the mapped domain/skill) — no answer
+text, no free input, and no personal information. The attempt log is capped in
+size, and the dashboard's **"Reset all progress"** clears every stored key,
+including the attempt log and any in-progress exam session.
 
 ## Project Structure
 
@@ -136,18 +150,39 @@ Append an entry to `content/flashcards.json`. `topicId` must match a topic `id`:
 
 ### Add a quiz question
 
-Append an entry to `content/quiz.json`. Provide `correctIds` (length > 1 makes it "select all that apply") and an explanation for every option:
+Append an entry to `content/quiz.json`. Provide `correctIds` (length > 1 makes it "select all that apply"), an explanation for every option, blueprint `skillIds`, `difficulty`, `cognitiveLevel`, and provenance (`status` + `evidence`, or inherited from the topic):
 
 ```json
 {
-  "id": "q11",
+  "id": "q57",
   "topicId": "my-topic",
+  "skillIds": ["d2-messages-api"],
+  "difficulty": "core",
+  "cognitiveLevel": "application",
+  "status": "verified",
+  "evidence": [
+    {
+      "sourceType": "official",
+      "confidence": "high",
+      "source": "Anthropic — Messages API",
+      "url": "https://platform.claude.com/docs/en/api/messages",
+      "verifiedOn": "2026-09-09"
+    }
+  ],
   "question": "…",
   "options": [{ "id": "a", "text": "…" }, { "id": "b", "text": "…" }],
   "correctIds": ["b"],
   "explanations": { "a": "why it's wrong", "b": "why it's right" }
 }
 ```
+
+Every `evidence` entry declares a `sourceType` — **`official`** (a first-party
+Anthropic doc), **`secondary`** (a community source that corroborates), or
+**`inferred`** (a reasoned conclusion). A `status: "verified"` question that is
+used in the graded simulation must carry at least one `official`/`secondary`
+source (its own or inherited from its topic); validation refuses to let a
+secondary/community host be labeled `official`, and refuses to ship a bank that
+can't build a full 53-item blueprint-weighted exam.
 
 The test suite (`npm run test`) validates content integrity — every flashcard/quiz `topicId` must resolve to a real topic, and every topic in the index must have a matching MDX file.
 

@@ -11,6 +11,11 @@ import {
   type DiagnosticResult,
   type ReadinessBand,
 } from "@/lib/diagnostic";
+import {
+  appendAttempts,
+  buildAttempts,
+  type QuestionAttempt,
+} from "@/lib/question-attempts";
 import { appendAttempt, type DiagnosticAttempt } from "@/lib/diagnostic-history";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
@@ -50,6 +55,10 @@ export function DiagnosticRunner({
   const [result, setResult] = useState<DiagnosticResult | null>(null);
   const [history, setHistory] = useLocalStorage<DiagnosticAttempt[]>(
     STORAGE_KEYS.diagnosticHistory,
+    []
+  );
+  const [, setAttempts] = useLocalStorage<QuestionAttempt[]>(
+    STORAGE_KEYS.questionAttempts,
     []
   );
 
@@ -93,6 +102,18 @@ export function DiagnosticRunner({
       totalMs: res.timing.totalMs,
     };
     setHistory((prev) => appendAttempt(prev, attempt));
+
+    // Record per-question attempts locally for error-driven remediation.
+    const questionAttempts = buildAttempts({
+      questions,
+      answers,
+      blueprint,
+      source: "diagnostic",
+      now: Date.now(),
+    });
+    if (questionAttempts.length > 0) {
+      setAttempts((prev) => appendAttempts(prev, questionAttempts));
+    }
 
     scrollToTop();
   };

@@ -185,3 +185,56 @@ describe("buildStudyPlan — exclusions, cap, empty state", () => {
     expect(buildStudyPlan(args())).toEqual(buildStudyPlan(args()));
   });
 });
+
+describe("buildStudyPlan — error-driven remediation", () => {
+  it("boosts and adds a targeted-practice action for a recently-missed skill", () => {
+    const plan = buildStudyPlan({
+      blueprint: bp(),
+      mastery: [
+        mastery("a1", "d-a", 55, "developing"),
+        mastery("a2", "d-a", 55, "developing"),
+      ],
+      overdueBySkill: new Map(),
+      topics: [topic("t-a1", ["a1"]), topic("t-a2", ["a2"])],
+      recentMissesBySkill: new Map([["a2", 2]]),
+      practiceQuestionsBySkill: new Map([["a2", 8]]),
+    });
+    // a2 was recently missed => it should rank first despite equal mastery.
+    expect(plan.items[0].skillId).toBe("a2");
+    const a2 = plan.items.find((i) => i.skillId === "a2")!;
+    const practice = a2.actions.find((x) => x.kind === "practice");
+    expect(practice).toBeDefined();
+    // Capped at 5 targeted questions even though 8 are available.
+    expect(practice && practice.kind === "practice" && practice.questionCount).toBe(5);
+    expect(a2.reason).toMatch(/Missed 2 recent questions/i);
+  });
+
+  it("never skips a recently-missed skill even when mastery is strong", () => {
+    const plan = buildStudyPlan({
+      blueprint: bp(),
+      mastery: [mastery("a1", "d-a", 95, "mastered")],
+      overdueBySkill: new Map(),
+      topics: [topic("t-a1", ["a1"])],
+      recentMissesBySkill: new Map([["a1", 1]]),
+      practiceQuestionsBySkill: new Map([["a1", 3]]),
+    });
+    expect(plan.allCaughtUp).toBe(false);
+    expect(plan.items[0].skillId).toBe("a1");
+    const practice = plan.items[0].actions.find((x) => x.kind === "practice");
+    expect(practice && practice.kind === "practice" && practice.questionCount).toBe(3);
+  });
+
+  it("is unchanged when no remediation signal is supplied (back-compat)", () => {
+    const base = {
+      blueprint: bp(),
+      mastery: [mastery("a1", "d-a", 30, "beginning")],
+      overdueBySkill: new Map<string, number>(),
+      topics: [topic("t-a1", ["a1"])],
+    };
+    const withEmpty = buildStudyPlan({ ...base, recentMissesBySkill: new Map() });
+    const without = buildStudyPlan(base);
+    expect(withEmpty).toEqual(without);
+    // No practice action without a miss signal.
+    expect(without.items[0].actions.some((a) => a.kind === "practice")).toBe(false);
+  });
+});

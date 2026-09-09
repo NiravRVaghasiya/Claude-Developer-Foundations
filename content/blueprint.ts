@@ -74,11 +74,13 @@ export const blueprint: Blueprint = {
     cutScore: 720,
   },
   source: {
+    sourceType: "secondary",
+    confidence: "medium",
     source:
       "CCDV-F Exam Guide v1.0 (official, effective 2026-07) — corroborated via FlashGenius interactive guide (secondary)",
     url: "https://flashgenius.net/guides/claude-certified-developer-foundations-ccdv-f-2026-interactive-guide",
     verifiedOn: "2026-09-09",
-    note: "Domain titles/weights and format (53 items, 120 min, cut 720) are from the official Anthropic CCDV-F Exam Guide v1.0; the linked URL is a SECONDARY community guide that cites the official guide (the official PDF is not a stable public URL). See docs/phases/01-claims-ledger.md.",
+    note: "Domain titles/weights and format (53 items, 120 min, cut 720) are from the official Anthropic CCDV-F Exam Guide v1.0; the linked URL is a SECONDARY community guide that cites the official guide (the official PDF is not a stable public URL). The blueprint distribution is therefore treated as DERIVED/SECONDARY, not independently verifiable from a stable official public URL. See docs/phases/01-claims-ledger.md.",
   },
   domains: [
     {

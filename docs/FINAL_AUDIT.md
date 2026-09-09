@@ -103,6 +103,50 @@ bank now equals the official 53-item count with blueprint-weighted distribution,
 so the exam simulator runs full-length. (Remaining nice-to-have: more
 multiple-response items — currently 1.)
 
+## Addendum — 2026-09-09 audit-and-improve pass
+
+A follow-up staff/QA pass hardened trustworthiness and closed the remaining
+exam-alignment and remediation gaps without redesigning the architecture:
+
+- **Provenance model strengthened.** `Evidence` now carries an explicit
+  `sourceType` (`official` | `secondary` | `inferred`) and `confidence`. Validation
+  rejects invalid tiers, **refuses to let a known secondary/community host be
+  labeled `official`**, and requires every `status: "verified"` (exam-critical)
+  question to be backed by a citable official/secondary source (self or inherited).
+  The blueprint source is explicitly tagged `sourceType: "secondary"` (derived from
+  the exam guide via a community URL), so the distribution is never presented as
+  independently official.
+- **Bank rebalanced to blueprint targets.** Added original scenario questions so
+  under-supplied domains meet their weighted ideal (D1 6→8, D7 3→4) and added a
+  second multiple-response item. Bank is now **56 questions**, and a full 53-item
+  blueprint-weighted exam allocates every domain with **0 drift**.
+- **Deterministic exam allocation + drift detection.** `planExamAllocation`
+  (pure, seed-independent, largest-remainder over all 8 domains, capped by
+  availability) reports per-domain ideal/available/allocated/shortfall. Validation
+  warns on drift and the `validate:content` runner **hard-fails** if the shipped
+  bank can't build a full 53-item exam. Covered by unit + real-content tests.
+- **Local performance analytics (no PII).** `question-attempts.ts` records only
+  graded outcomes (id, correct, optional response time, domain, skill, timestamp),
+  capped, via the existing `localStorage` abstraction; derives overall/domain/skill
+  accuracy, repeated-error rate, recency, and average response time.
+- **Error-driven remediation.** The existing study-plan engine now consumes the
+  attempt log: recently-missed skills get a bounded priority boost, a targeted
+  "practice N questions" action, and an explainable reason — no separate system.
+  Exam and diagnostic submits record attempts; the exam results page gained a
+  "What to focus on next" block (weak skills → topics → targeted practice).
+- **Full-length simulation UX.** With the bank at ≥53, the simulator runs
+  full-length and is labeled a **"53-Question CCDV-F Practice Simulation"** with an
+  explicit "not the actual Anthropic exam" notice.
+
+**Verification (this pass):** `typecheck` clean · `lint` clean · `validate:content`
+pass (18 topics / 57 flashcards / 56 questions / 8 domains, 0 warnings) ·
+**218 tests across 29 files** · `build` green (28 static pages, 103 kB shared JS).
+
+**Residual risks unchanged:** manual AT accessibility pass still recommended;
+vision figures remain `needs-review`; the CCDV-F blueprint distribution remains a
+**secondary-sourced** derivation (no stable official public URL) and is labeled as
+such — it is not independently verifiable and is not a claim of official endorsement.
+
 ## Verdict: SHIP
 
 The platform meets the master plan's definition of done: content is original,

@@ -10,6 +10,7 @@ import {
   remainingMs,
   isExpired,
   analyzeExam,
+  planExamAllocation,
   DEFAULT_CUT_PCT,
 } from "@/lib/exam";
 
@@ -128,6 +129,54 @@ describe("assembleExam", () => {
         it.question.options.map((o) => o.id).sort()
       );
     }
+  });
+});
+
+describe("planExamAllocation (blueprint-weighted allocation + drift)", () => {
+  it("allocates exactly the target across all domains, weight-proportional", () => {
+    // Pool: 8 A (weight 75), 2 B (weight 25). Full 53-target is capped to 10.
+    const plan = planExamAllocation(pool(), bp(), 53);
+    expect(plan.totalAvailable).toBe(10);
+    expect(plan.allocatedTotal).toBe(10); // capped to pool
+    const a = plan.domains.find((d) => d.domainId === "d-a")!;
+    const b = plan.domains.find((d) => d.domainId === "d-b")!;
+    expect(a.allocated + b.allocated).toBe(10);
+    // A dominates by weight.
+    expect(a.allocated).toBeGreaterThan(b.allocated);
+  });
+
+  it("totals exactly the item count when the pool is large enough", () => {
+    // 20 A + 20 B available, ask for 12 => weight 75/25 => 9 A, 3 B.
+    const big = [
+      ...Array.from({ length: 20 }, (_, i) => q(`a${i}`, ["a1"])),
+      ...Array.from({ length: 20 }, (_, i) => q(`b${i}`, ["b1"])),
+    ];
+    const plan = planExamAllocation(big, bp(), 12);
+    expect(plan.allocatedTotal).toBe(12);
+    const a = plan.domains.find((d) => d.domainId === "d-a")!;
+    const b = plan.domains.find((d) => d.domainId === "d-b")!;
+    expect(a.allocated).toBe(9);
+    expect(b.allocated).toBe(3);
+    expect(plan.meetsBlueprint).toBe(true);
+    expect(plan.notes).toEqual([]);
+  });
+
+  it("reports drift when a domain is under-supplied", () => {
+    // No B questions at all; asking for 8 => B is under-supplied.
+    const onlyA = Array.from({ length: 8 }, (_, i) => q(`a${i}`, ["a1"]));
+    const plan = planExamAllocation(onlyA, bp(), 8);
+    const b = plan.domains.find((d) => d.domainId === "d-b")!;
+    expect(b.available).toBe(0);
+    expect(b.allocated).toBe(0);
+    expect(b.shortfall).toBeGreaterThan(0);
+    expect(plan.meetsBlueprint).toBe(false);
+    expect(plan.notes.some((n) => /under-supplied/.test(n))).toBe(true);
+  });
+
+  it("is deterministic and independent of any seed", () => {
+    const p1 = planExamAllocation(pool(), bp(), 6);
+    const p2 = planExamAllocation(pool(), bp(), 6);
+    expect(p1).toEqual(p2);
   });
 });
 

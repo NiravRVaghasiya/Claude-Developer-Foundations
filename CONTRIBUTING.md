@@ -99,6 +99,12 @@ Types live in `src/lib/content-types.ts`; skills live in `content/blueprint.ts`.
 - `skillIds`, `difficulty`, `cognitiveLevel` (`recall|application|analysis`),
   `options` (≥2, unique ids), `correctIds` (⊆ options), an **explanation for every
   option**, `evidence[]` (or inherited), `status`.
+- Each `evidence` entry should declare a `sourceType` (`official` |
+  `secondary` | `inferred`) and, ideally, a `confidence` (`high|medium|low`).
+  A `status: "verified"` question must be backed by at least one
+  `official`/`secondary` source (its own or inherited from its topic).
+  **Never label a secondary/community source `official`** — validation enforces
+  this for known community hosts.
 
 ### Content submission checklist
 
@@ -108,7 +114,10 @@ Types live in `src/lib/content-types.ts`; skills live in `content/blueprint.ts`.
 - [ ] Every question option has a non-empty explanation.
 - [ ] Evidence has an official/authoritative source URL + `verifiedOn`, or the unit
       is marked `status: "needs-review"`.
-- [ ] `bun run validate:content` passes.
+- [ ] Evidence `sourceType` is honest — secondary/community sources are not
+      labeled `official`.
+- [ ] `bun run validate:content` passes (this also enforces that the bank can
+      still build a full 53-item blueprint-weighted exam).
 
 ### Content licensing
 
