@@ -44,7 +44,9 @@ describe("SearchBox", () => {
     render(<SearchBox />);
     const input = screen.getByLabelText(/search topics/i);
     fireEvent.change(input, { target: { value: "zzzznope" } });
-    expect(screen.getByText(/no matches/i)).toBeInTheDocument();
+    // "No matches" now appears both in the visible dropdown and the sr-only
+    // live region; both are acceptable, so assert at least one is present.
+    expect(screen.getAllByText(/no matches/i).length).toBeGreaterThan(0);
   });
 
   it("does not show a dropdown for a single character", () => {
@@ -52,5 +54,25 @@ describe("SearchBox", () => {
     const input = screen.getByLabelText(/search topics/i);
     fireEvent.change(input, { target: { value: "c" } });
     expect(screen.queryByText("Prompt Caching")).not.toBeInTheDocument();
+  });
+
+  it("exposes combobox + listbox semantics", () => {
+    render(<SearchBox />);
+    const input = screen.getByRole("combobox", { name: /search topics/i });
+    fireEvent.change(input, { target: { value: "cache" } });
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("listbox", { name: /search results/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("option").length).toBeGreaterThan(0);
+  });
+
+  it("announces the result count via a live region", () => {
+    render(<SearchBox />);
+    const input = screen.getByLabelText(/search topics/i);
+    fireEvent.change(input, { target: { value: "cache" } });
+    const status = screen.getByRole("status");
+    expect(status.textContent).toMatch(/\d+ result/i);
+
+    fireEvent.change(input, { target: { value: "zzzznope" } });
+    expect(screen.getByRole("status").textContent).toMatch(/no matches/i);
   });
 });

@@ -1,0 +1,76 @@
+## Core Concept
+
+**Claude Code** is Anthropic's terminal coding agent. For the exam you need its **configuration model** and its **operating modes**, plus the debugging discipline that spans any Claude app: when something fails, decide whether the bug is in **your integration** or in the **model output** before you try to fix it.
+
+Configuration is layered and file-based: a **CLAUDE.md** hierarchy supplies project/user context, **settings.json** holds permissions and options, **hooks** run shell commands at lifecycle points, **Skills/Commands/Agents** package reusable behavior, and an **agent memory** persists across sessions. Runtime behavior spans interactive, **headless** (programmatic/CI), and streaming modes.
+
+## Key Facts & Mechanics
+
+- **Core components:** Rules, Skills, Commands, Agents, and Agent Memory.
+- **CLAUDE.md hierarchy:** context files are layered (e.g. user-level and project-level) so shared conventions live in the repo and personal ones live per user.
+- **settings.json:** configures permissions, environment, and options; hooks are declared here.
+- **Hooks:** user-defined shell commands (or prompts) that fire at lifecycle points — useful for enforcing standards and quality checks automatically.
+- **Headless mode:** runs Claude Code programmatically; it **exits 0 on success and non-zero on failure**, so scripts and CI can branch on the exit status.
+- **Agent SDK:** the same building blocks (tools, context, loops, MCP) are available programmatically for building your own agents, not just the CLI.
+- **Debugging split (Domain 4):** isolate whether a failure is an **integration-layer** bug (your request/parsing/tools) or a **model-output** bug (the content the model produced), using trace analysis.
+
+## Annotated Code
+
+```bash
+# Headless mode in CI: branch on the exit code, capture output for triage.
+claude -p "Run the test suite and summarize failures" --output-format json > result.json
+if [ $? -ne 0 ]; then         # non-zero = the run failed
+  echo "Claude Code run failed; see result.json"
+  exit 1
+fi
+```
+
+```jsonc
+// settings.json (sketch): a hook that enforces a check after file edits.
+{
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "Edit|Write", "command": "npm run lint" }
+    ]
+  }
+}
+```
+
+## Debugging: where is the bug?
+
+| Symptom | Likely layer | First move |
+|---|---|---|
+| 400/401/403, malformed request | Integration | Check request shape, auth, tool schemas |
+| Valid response, wrong content | Model output | Inspect prompt/context; adjust instructions or examples |
+| Truncated output | Integration/limits | Check `stop_reason == max_tokens`; raise cap / continue |
+| Tool never called / mispaired | Integration | Verify tool definitions and `tool_use_id` pairing |
+
+## Mental Model
+
+Debugging a Claude app is like **splitting the stack into "my code" and "the model's answer."** A trace tells you which side owns the failure: if the request was malformed or a tool_result was mispaired, that's yours; if the request was well-formed and the *content* is wrong, that's a prompt/context problem. Fixing the wrong layer wastes the most time.
+
+## Common Traps
+
+<Callout type="trap" title="Blaming the model for an integration bug">
+**Trap:** Rewriting the prompt when the real issue is a malformed request, a bad tool schema, or a missing `tool_result`. Read the trace first; a 400 is almost always yours, not the model's.
+</Callout>
+
+<Callout type="trap" title="Headless success = zero exit only">
+**Trap:** Assuming a headless run "worked" because it printed output. Branch on the **exit code** — non-zero means the run failed even if there's text on stdout.
+</Callout>
+
+## Exam Tips
+
+- Know the config surface: **CLAUDE.md hierarchy, settings.json, hooks, Skills/Commands/Agents, memory**.
+- Headless mode is for **CI/scripts**; it signals success via **exit code**.
+- Debugging questions hinge on the **integration-layer vs. model-output** split — pick the answer that isolates the layer before proposing a fix.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario: Is it my bug or the model's?" prompt="An agent intermittently returns a 400 'messages: unexpected role' error on some turns. Where do you look first — the prompt or your code?">
+Start with your **integration layer**. A 400 with a structural message ("unexpected role") means the *request* is malformed — likely non-alternating roles or a mispaired tool_use/tool_result — not a reasoning failure. Trace the exact `messages[]` you sent on the failing turns. Rewriting the prompt wouldn't touch the real cause.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario: Enforcing a check in CI" prompt="Your team wants lint to run automatically whenever Claude Code edits a file, and CI must fail if Claude Code's run fails. What two mechanisms do you use?">
+Use a **hook** in `settings.json` (e.g. a `PostToolUse` hook matching edit/write actions) to run `lint` automatically after edits, and run Claude Code in **headless mode** in CI, branching on its **exit code** so a non-zero result fails the pipeline. Hooks enforce the standard locally; the exit code gates the build.
+</RevealAnswer>

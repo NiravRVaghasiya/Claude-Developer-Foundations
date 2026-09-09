@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { isMultiResponse, type QuizQuestion } from "@/lib/content-types";
 import {
   isQuestionCorrect,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/quiz";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
+import { scrollToTop } from "@/lib/a11y";
 
 const TONE_CLASSES: Record<string, string> = {
   good: "text-green-700 dark:text-green-400",
@@ -21,6 +22,7 @@ const TONE_CLASSES: Record<string, string> = {
 export function QuizRunner({ questions }: { questions: QuizQuestion[] }) {
   const [answers, setAnswers] = useState<QuizAnswers>({});
   const [submitted, setSubmitted] = useState(false);
+  const resultHeadingRef = useRef<HTMLParagraphElement>(null);
   const [bestScore, setBestScore] = useLocalStorage<number>(
     STORAGE_KEYS.quizBestScore,
     0
@@ -56,10 +58,14 @@ export function QuizRunner({ questions }: { questions: QuizQuestion[] }) {
       setBestScore(result.correct);
       setBestTotal(result.total);
     }
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    scrollToTop();
   };
+
+  // Move focus to the score heading when results appear (screen-reader users
+  // are taken straight to the outcome).
+  useEffect(() => {
+    if (submitted) resultHeadingRef.current?.focus();
+  }, [submitted]);
 
   const reset = () => {
     setAnswers({});
@@ -81,7 +87,11 @@ export function QuizRunner({ questions }: { questions: QuizQuestion[] }) {
 
       {submitted ? (
         <div className="mb-8 rounded-xl border border-neutral-200 bg-neutral-50 p-6 text-center dark:border-neutral-800 dark:bg-neutral-900/50">
-          <p className="text-sm uppercase tracking-wide text-neutral-500">
+          <p
+            ref={resultHeadingRef}
+            tabIndex={-1}
+            className="text-sm uppercase tracking-wide text-neutral-500 focus:outline-none"
+          >
             Your score
           </p>
           <p className="my-1 text-4xl font-bold">

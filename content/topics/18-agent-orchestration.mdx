@@ -1,0 +1,71 @@
+## Core Concept
+
+Beyond a single agent loop, real systems **orchestrate multiple agents**. The dominant pattern is **manager/subagent** (also called orchestrator/worker): a **manager** agent decomposes a task, delegates subtasks to **subagents**, and composes their results. The key win is **context isolation** — each subagent runs in its **own context window** and returns only a **distilled result**, so the manager's context stays clean instead of filling with every intermediate tool output.
+
+The second orchestration primitive is **hooks**: user-defined shell commands (or prompts) that fire at **lifecycle points** (e.g. after a tool use) to enforce standards or quality checks **deterministically**, rather than hoping the model remembers to do them.
+
+## Key Facts & Mechanics
+
+- **Manager/subagent (orchestrator/worker):** a manager delegates subtasks to subagents; each subagent works in **isolated context** and returns a compact result. This bounds context growth on long, multi-part tasks.
+- **When to reach for it:** a single agent's context is being crowded out by intermediate tool output, or subtasks are independent and can be tackled separately (and sometimes in parallel).
+- **Hooks are deterministic guardrails:** they run **your** code at lifecycle points, so enforcement doesn't depend on the model choosing to comply. Good for lint/tests/policy checks.
+- **Loop guards still apply:** every agent (manager and subagents) needs a max-iterations cap so orchestration can't spin or fan out without bound.
+- **Workflow vs. orchestrated agents:** if the decomposition is fixed and known, a **workflow** of predefined steps is cheaper and more reliable than a manager that re-derives the plan each run.
+
+## Annotated Code
+
+```python
+# Manager delegates a subtask to a subagent that runs in its OWN context and
+# returns only a distilled result — the manager's context never sees the noise.
+def manager(task):
+    subtasks = plan(task)                    # manager decomposes the work
+    findings = []
+    for st in subtasks:
+        result = run_subagent(st)            # subagent: isolated context window
+        findings.append(result.summary)      # keep only the distilled output
+    return synthesize(findings)              # manager composes final answer
+
+def run_subagent(subtask, MAX_STEPS=8):      # loop guard on the subagent too
+    messages = [{"role": "user", "content": subtask}]
+    for _ in range(MAX_STEPS):
+        resp = client.messages.create(model="claude-sonnet-5",
+                                      max_tokens=1024, tools=TOOLS, messages=messages)
+        if resp.stop_reason == "end_turn":
+            return distill(resp)             # return a compact summary, not raw traces
+        # ... handle tool_use, append tool_result, loop ...
+    raise RuntimeError("subagent hit max steps")
+```
+
+## Mental Model
+
+Think of a **general contractor and subcontractors**. The contractor (manager) doesn't personally lay every brick — they hand a scoped job to a subcontractor (subagent) who works on their own site (isolated context) and reports back a **one-line status**, not their entire day. The contractor keeps a clean project view. **Hooks** are the mandatory inspections that happen at fixed milestones no matter what — enforced by the process, not left to memory.
+
+## Common Traps
+
+<Callout type="trap" title="One giant agent for everything">
+**Trap:** Pushing a long, multi-part task through a single agent until its context fills with intermediate tool output and later reasoning degrades. Delegate to **subagents with isolated context** and return only distilled results.
+</Callout>
+
+<Callout type="trap" title="Relying on the model to enforce checks">
+**Trap:** Asking the model to "remember to run lint/tests." Enforcement that must always happen belongs in a **hook** (deterministic), not in a prompt the model may ignore.
+</Callout>
+
+<Callout type="trap" title="No guard on fan-out">
+**Trap:** Orchestrating subagents with no iteration or depth cap. Manager and subagents each need a **loop guard** so cost and recursion stay bounded.
+</Callout>
+
+## Exam Tips
+
+- "Context keeps filling with intermediate results on a long task" → **manager/subagent with isolated context**.
+- "Enforce a check automatically at a lifecycle point" → **hook** (deterministic), not a prompt instruction.
+- Fixed, known steps → **workflow**; dynamic self-directed process → **agent**; many independent subtasks → **orchestration**.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario: Research Agent Drowning in Context" prompt="A research agent must read 40 sources and produce one report. Run through a single agent, its context fills with raw page text and later synthesis gets worse. What orchestration fixes this?">
+Use a **manager/subagent** design. The manager splits the sources into batches and delegates each to a **subagent** that reads its batch in an **isolated context window** and returns a **short distilled summary**. The manager only ever holds the summaries, not the raw pages, so its context stays clean and final synthesis stays sharp. Keep a loop guard on each subagent to bound cost.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario: Guaranteeing a Quality Gate" prompt="Your team needs tests to run every time an agent edits code, and it must not depend on the model choosing to do so. What mechanism, and why not just prompt it?">
+Use a **hook** that fires at the post-edit lifecycle point to run the tests. A prompt instruction is **non-deterministic** — the model may skip it under load or after a long session. A hook runs **your** command every time regardless of the model's decisions, making the gate reliable.
+</RevealAnswer>

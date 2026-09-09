@@ -2,6 +2,7 @@
   "name": "ccdv-f-study",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Interactive study website for the Claude Certified Developer: Foundations (CCDV-F) exam.",
   "scripts": {
     "search-index": "node scripts/build-search-index.mjs",
@@ -11,8 +12,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "validate:content": "bun scripts/validate-content.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify": "bun run typecheck && bun run lint && bun run validate:content && bun run test"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.0",

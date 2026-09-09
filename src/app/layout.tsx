@@ -19,6 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen antialiased">
+        <a href="#main" className="skip-link">
+          Skip to content
+        </a>
         <ThemeProvider>
           <AppShell groups={groups}>{children}</AppShell>
         </ThemeProvider>

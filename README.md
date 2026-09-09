@@ -4,16 +4,33 @@ An interactive study website for the **Claude Certified Developer: Foundations (
 
 Built with Next.js (App Router) and deployable to Vercel as static output.
 
+## The learner loop
+
+The platform supports a full study loop, all client-side:
+
+1. **Diagnose** — take a diagnostic to see strengths and gaps by exam domain and skill.
+2. **Plan** — get a prioritized, explainable daily study plan (weak + overdue skills first).
+3. **Learn** — read verified, sourced topic pages mapped to the exam blueprint.
+4. **Practice** — drill flashcards (spaced repetition) and a scored practice quiz.
+5. **Review** — see per-option explanations and per-skill mastery with reasons.
+6. **Simulate** — take a timed, no-feedback exam simulation with post-exam analysis.
+7. **Track readiness** — a study-readiness estimate (never a pass-probability claim).
+
 ## Features
 
-- **13 topic pages** rendered from MDX, with syntax-highlighted code, tables, trap/tip callouts, and collapsible "reveal answer" scenario challenges.
-- **Flashcards** — flip to reveal, filter by topic, and mark cards known / still-learning.
-- **Spaced repetition** — a Leitner-style scheduler (`Again / Hard / Good / Easy`) that resurfaces cards due-first.
-- **Practice quiz** — single- and multiple-response ("select all that apply") questions, instant scoring, and per-option explanations.
-- **Progress dashboard** — reading coverage, flashcard mastery, and best quiz score, with a one-click reset.
-- **Full-text search** across all topic content.
-- **Dark mode** and a responsive, mobile-friendly layout.
+- **Topic pages** rendered from MDX, with syntax-highlighted code, tables, trap/tip callouts, and collapsible "reveal answer" scenario challenges.
+- **Flashcards** with **spaced repetition** — a Leitner-style scheduler (`Again / Hard / Good / Easy`) that resurfaces cards due-first.
+- **Practice quiz** — single- and multiple-response questions, instant scoring, per-option explanations.
+- **Diagnostic assessment** — per-domain/skill scoring, weaknesses, recommendations, and a study-readiness estimate.
+- **Adaptive study plan** — explainable per-skill mastery and a prioritized daily plan.
+- **Exam simulator** — a separate, timed, no-feedback simulation with navigation, flagging, autosave/resume, timeout auto-submit, and detailed analysis.
+- **Progress dashboard**, **full-text search**, **dark mode**, and a responsive, accessible layout.
 - **No backend, no login** — all progress lives in `localStorage`.
+
+> Every topic, flashcard, and question maps to a structured, sourced exam
+> **blueprint** (`content/blueprint.ts`). Content is original study material with
+> traceable evidence — not reproduced exam content. See
+> [`docs/phases/01-claims-ledger.md`](docs/phases/01-claims-ledger.md).
 
 ## Tech Stack
 
@@ -43,9 +60,30 @@ npm run build
 
 # run the test suite
 npm run test
+
+# type-check, lint, and validate content
+npm run typecheck
+npm run lint
+npm run validate:content
 ```
 
 > A search index (`content/search-index.json`) is generated automatically before `dev` and `build` by the `predev` / `prebuild` scripts. To regenerate it manually, run `npm run search-index`.
+
+### Quality gates & CI
+
+Content is treated as production data. `validate:content` runs a strict, pure
+validator (`src/lib/content-validation.ts`) over the blueprint, topics,
+flashcards, and questions — checking skill mappings, unique IDs, per-option
+explanations, orphan content, metadata enums, and evidence/provenance. The same
+validator is asserted inside the test suite, so tests and the CLI gate can't drift.
+
+Every push and pull request runs `.github/workflows/ci.yml`, which executes
+`typecheck`, `lint`, `validate:content`, `test`, and `build` (via Bun). Any error
+fails the build.
+
+> `validate:content` runs the TypeScript validator directly with **Bun**
+> (`bun scripts/validate-content.ts`), which the project already uses as its
+> runtime/lockfile (`bun.lock`).
 
 ## Project Structure
 
@@ -112,6 +150,28 @@ Append an entry to `content/quiz.json`. Provide `correctIds` (length > 1 makes i
 ```
 
 The test suite (`npm run test`) validates content integrity — every flashcard/quiz `topicId` must resolve to a real topic, and every topic in the index must have a matching MDX file.
+
+## Contributing & governance
+
+Contributions are welcome — especially content corrections (accuracy is a top
+priority). Please read:
+
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — dev setup, quality gates, and the
+  **content contribution rules** (original questions only, skill mapping, sourced
+  evidence).
+- [SECURITY.md](./SECURITY.md) — how to report vulnerabilities and the security posture.
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- [docs/VERSIONING.md](./docs/VERSIONING.md) — the app / content / blueprint version tracks.
+- [CHANGELOG.md](./CHANGELOG.md)
+
+Before opening a PR: `bun run verify` (typecheck, lint, validate:content, test)
+and `bun run build`. CI runs the same gates.
+
+## License
+
+Source code is licensed under the [MIT License](./LICENSE). The original
+educational content under `content/` is authored material that the maintainer may
+license separately — see the note in `LICENSE` and CONTRIBUTING.
 
 ## Deployment
 

@@ -2,145 +2,634 @@
   {
     "id": "fc-messages-api-1",
     "topicId": "messages-api",
+    "skillIds": [
+      "d2-messages-api"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Where does the system prompt go in the Messages API, and why can't it be a message?",
     "answer": "It's a top-level `system` parameter. It's a standing instruction, not a conversational turn — there is no `system` role in `messages[]`, so putting it there raises a validation error."
   },
   {
     "id": "fc-messages-api-2",
     "topicId": "messages-api",
+    "skillIds": [
+      "d2-messages-api"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Your response comes back with stop_reason: \"max_tokens\". Is the output complete? What's the fix?",
     "answer": "No — it's truncated. Increase `max_tokens`, or make a continuation call. Only `end_turn` (and sometimes `stop_sequence`) is a clean finish."
   },
   {
     "id": "fc-messages-api-3",
     "topicId": "messages-api",
+    "skillIds": [
+      "d2-messages-api"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Why must you resend the whole conversation on every turn?",
     "answer": "The API is stateless — no server-side memory. The full `messages[]` array IS the memory; omit earlier turns and Claude loses that context."
   },
   {
     "id": "fc-tool-use-1",
     "topicId": "tool-use",
+    "skillIds": [
+      "d8-tool-use"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Who executes the tool, and what field links a tool_result to its tool_use?",
     "answer": "Your code executes the tool — Claude only emits a request. The `tool_use_id` links the `tool_result` back to the `tool_use`; it must exactly match the `id` on the corresponding `tool_use` block."
   },
   {
     "id": "fc-tool-use-2",
     "topicId": "tool-use",
+    "skillIds": [
+      "d8-tool-use",
+      "d1-agent-loop"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Claude returns two tool_use blocks. How many messages do you send back, and how are results structured?",
     "answer": "One user message containing two `tool_result` blocks — one per `tool_use`, each keyed by its own `tool_use_id`."
   },
   {
     "id": "fc-tool-use-3",
     "topicId": "tool-use",
+    "skillIds": [
+      "d8-tool-use"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "How do you let Claude recover from a tool that throws?",
     "answer": "Catch the error and return a `tool_result` with `is_error: true` and the message as content. Claude can then apologize, retry, or ask the user — the loop stays intact."
   },
   {
     "id": "fc-structured-output-1",
     "topicId": "structured-output",
+    "skillIds": [
+      "d6-structured-output"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Which structured-output technique gives the strongest schema guarantees, and why?",
     "answer": "A tool with `input_schema` (forced via `tool_choice`). The `tool_use.input` is validated against the schema and delivered as a parsed object — no string parsing, no markdown fences."
   },
   {
     "id": "fc-structured-output-2",
     "topicId": "structured-output",
+    "skillIds": [
+      "d6-structured-output"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
     "question": "You prefill the assistant turn with '{'. What must you remember when parsing?",
     "answer": "The prefilled '{' is NOT echoed back in response.content — you must prepend it yourself (and re-append '}' if you stopped on it) before json.loads()."
   },
   {
     "id": "fc-streaming-1",
     "topicId": "streaming",
+    "skillIds": [
+      "d2-streaming"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Which event carries incremental text, and does streaming reduce total or perceived latency?",
     "answer": "`content_block_delta` (with a `text_delta`) carries incremental text — accumulate each into a buffer. Streaming reduces perceived latency (TTFB); total generation time is roughly the same."
   },
   {
     "id": "fc-streaming-2",
     "topicId": "streaming",
+    "skillIds": [
+      "d2-batch-vs-realtime"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "When should you use the batch API instead of streaming?",
     "answer": "For non-interactive, high-volume/offline jobs where cost matters. Batch is ~50% cheaper and async. Streaming is for interactive UX, not throughput or cost."
   },
   {
     "id": "fc-model-selection-1",
     "topicId": "model-selection",
+    "skillIds": [
+      "d5-model-tradeoffs"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "A high-volume intent-classification endpoint needs low cost and low latency. Which model?",
     "answer": "Haiku — cheapest and fastest, and classification doesn't need Opus-level reasoning."
   },
   {
     "id": "fc-model-selection-2",
     "topicId": "model-selection",
+    "skillIds": [
+      "d5-model-tradeoffs",
+      "d5-llm-fundamentals"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Why shouldn't you tune temperature and top_p together, and pin vs float?",
     "answer": "They both control randomness via overlapping mechanisms; adjusting both makes output unpredictable — change one. Pin a dated model ID for reproducible production; 'latest' aliases float and can silently change behavior."
   },
   {
     "id": "fc-prompt-caching-1",
     "topicId": "prompt-caching",
+    "skillIds": [
+      "d2-prompt-caching"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
     "question": "On the default 5-minute tier, what does a cache WRITE cost and what does a READ cost?",
     "answer": "Write = 1.25x base input; Read/refresh = 0.1x. 1-hour tier writes cost 2.0x. Max 4 breakpoints, 20-block lookback. Place the breakpoint on the LAST stable block."
   },
   {
     "id": "fc-prompt-caching-2",
     "topicId": "prompt-caching",
+    "skillIds": [
+      "d2-prompt-caching"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
     "question": "Why is putting cache_control on a block with a per-request timestamp a mistake?",
     "answer": "The timestamp changes the cumulative hash every request → cache miss → fresh write each time, zero reads. That's strictly more expensive than not caching. Move volatile content after the breakpoint."
   },
   {
     "id": "fc-token-counting-1",
     "topicId": "token-counting",
+    "skillIds": [
+      "d5-token-cost"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "What exactly does the count_tokens endpoint return, and does it factor in caching?",
     "answer": "Only { \"input_tokens\": N } for the given model. It does NOT apply caching logic and cannot predict output tokens. It's free and rate-limited separately from message creation."
   },
   {
     "id": "fc-token-counting-2",
     "topicId": "token-counting",
+    "skillIds": [
+      "d5-token-cost",
+      "d5-model-migration"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "What's the risk of reusing an old token count when migrating to a newer model?",
     "answer": "Claude 4.7+/Fable/Mythos use a newer tokenizer emitting ~30% more tokens for identical text. Reusing old counts under-budgets by ~30%. Always recount on the target model."
   },
   {
     "id": "fc-vision-1",
     "topicId": "vision",
+    "skillIds": [
+      "d2-vision"
+    ],
+    "difficulty": "core",
+    "status": "needs-review",
     "question": "How is an image's token cost calculated, and what's the patch size?",
     "answer": "Claude tiles the image into 28x28-pixel patches (visual tokens): cost = ceil(width/28) * ceil(height/28). Images over the tier's long-edge limit are downscaled first."
   },
   {
     "id": "fc-vision-2",
     "topicId": "vision",
+    "skillIds": [
+      "d2-vision"
+    ],
+    "difficulty": "advanced",
+    "status": "needs-review",
     "question": "In a multi-turn agent inspecting many images, what keeps request size and latency down?",
     "answer": "Upload each image once via the Files API and reference by file_id. Base64 bytes are resent on every turn, ballooning payload size and risking the 32 MB per-request cap."
   },
   {
     "id": "fc-error-handling-1",
     "topicId": "error-handling",
+    "skillIds": [
+      "d2-error-handling"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "What HTTP status is a rate limit, what is server overload, and what's the core difference?",
     "answer": "429 = rate_limit_error (YOUR org hit a limit/spend cap; check retry-after). 529 = overloaded_error (Anthropic infra saturated for ALL users; retry with backoff+jitter). A spend-cap 429 has NO retry-after and won't clear via backoff."
   },
   {
     "id": "fc-error-handling-2",
     "topicId": "error-handling",
+    "skillIds": [
+      "d2-error-handling",
+      "d4-error-identification"
+    ],
+    "difficulty": "core",
+    "status": "verified",
     "question": "Which error codes should you NOT retry, and why is jitter required?",
     "answer": "Don't retry 400/401/403 — they're permanent (bad request, key, or permission). Jitter avoids a thundering herd where synchronized retries re-trigger overload."
   },
   {
     "id": "fc-agent-loop-1",
     "topicId": "agent-loop",
+    "skillIds": [
+      "d1-agent-loop"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
     "question": "Which stop_reason means 'run a tool and continue,' and which means 'truncated, not really done'?",
     "answer": "tool_use = execute the tool(s), return tool_result(s), loop. max_tokens = output was TRUNCATED (incomplete). end_turn = clean finish. Always cap iterations with a loop guard."
   },
   {
     "id": "fc-agent-loop-2",
     "topicId": "agent-loop",
+    "skillIds": [
+      "d1-agent-loop",
+      "d8-tool-use"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
     "question": "What happens if the model makes two parallel tool calls but you return only one tool_result?",
     "answer": "The next request is malformed — every tool_use must be answered by a matching tool_result (by tool_use_id) in the following user turn. The API returns 400 invalid_request_error."
   },
   {
     "id": "fc-model-migration-1",
     "topicId": "model-migration",
+    "skillIds": [
+      "d5-model-migration"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
     "question": "What's the safe rollout order for a model migration, and why pin versions?",
     "answer": "Shadow (mirror traffic, don't serve) → canary (small % real traffic) → gradual ramp → 100%, with fast rollback to a PINNED version. Pinning gives reproducibility; floating aliases break it in prod."
   },
   {
     "id": "fc-model-migration-2",
     "topicId": "model-migration",
+    "skillIds": [
+      "d5-model-migration"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
     "question": "Why can migrating a prefill-based prompt to Claude 4.6+ cause an outage?",
     "answer": "Claude 4.6+ does not support assistant-message prefill → every prefilled request returns 400 invalid_request_error. Replace prefill with structured outputs / output_config.format / system-prompt guidance before migrating."
+  },
+  {
+    "id": "fc-prompt-context-1",
+    "topicId": "prompt-context-engineering",
+    "skillIds": [
+      "d6-prompt-principles"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Where should a durable rule like 'always answer in JSON' live, and why not in each user message?",
+    "answer": "In the `system` prompt — it's a standing constraint. Repeating it in every user turn dilutes it and yields inconsistent adherence; the user turn is for the immediate task, not durable rules."
+  },
+  {
+    "id": "fc-prompt-context-2",
+    "topicId": "prompt-context-engineering",
+    "skillIds": [
+      "d6-context-management"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
+    "question": "A long-running agent starts repeating steps as its window fills with raw tool output. What three context strategies help?",
+    "answer": "Compaction (summarize old turns), tool-result clearing (drop bulky results once used), and external memory (persist durable facts, re-inject only what's needed). It's a context-management problem, not a reason to switch models."
+  },
+  {
+    "id": "fc-security-1",
+    "topicId": "security-safety",
+    "skillIds": [
+      "d7-prompt-injection",
+      "d7-guardrails"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Why is 'add: ignore malicious instructions' in the system prompt an inadequate defense against prompt injection?",
+    "answer": "It's a request, not an enforceable control. Real defense isolates untrusted content as data (not instructions), scopes tools with least privilege, and gates high-risk actions behind human approval — defense in depth, not a polite plea."
+  },
+  {
+    "id": "fc-security-2",
+    "topicId": "security-safety",
+    "skillIds": [
+      "d7-secrets"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Where do API keys belong, and where must they never appear?",
+    "answer": "In environment variables or a secret manager, loaded server-side at request time and rotated on exposure. Never in prompts, source code, client bundles, or logs — all of which can leak or be surfaced via injection."
+  },
+  {
+    "id": "fc-mcp-1",
+    "topicId": "mcp-and-tools",
+    "skillIds": [
+      "d8-mcp-servers"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "What three primitives does an MCP server expose, and over what transports?",
+    "answer": "Tools (callable functions), resources (readable data), and prompts (reusable templates) — over stdio (local child process) or HTTP (remote)."
+  },
+  {
+    "id": "fc-mcp-2",
+    "topicId": "mcp-and-tools",
+    "skillIds": [
+      "d8-agentic-customization"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Several apps need the same capability through Claude. Custom tool per app, or MCP server?",
+    "answer": "An MCP server — one reusable, standard integration many clients can connect to. Copying a custom client-side tool into each app multiplies maintenance and drift. Custom tools fit one-off, app-specific logic; check built-in tools first."
+  },
+  {
+    "id": "fc-claude-code-1",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d3-modes"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "How does headless Claude Code signal success or failure to a CI script?",
+    "answer": "Via its exit code: 0 on success, non-zero on failure. Branch on the exit status — don't assume success just because there's output on stdout."
+  },
+  {
+    "id": "fc-claude-code-2",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d4-trace-analysis"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "You get a 400 'unexpected role' error. Is that more likely an integration bug or a model-output bug?",
+    "answer": "An integration bug. A structural 400 means the request you sent is malformed (e.g. non-alternating roles or a mispaired tool_use/tool_result), not a reasoning failure. Read the trace and fix the request, not the prompt."
+  },
+  {
+    "id": "fc-agent-sdk-1",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d1-agent-sdk"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "What does the Claude Agent SDK give you beyond the Claude Code CLI?",
+    "answer": "The same building blocks the CLI uses — tools, context management, the agent loop, and MCP — exposed programmatically so you can build your own agents in code, not just run the terminal app."
+  },
+  {
+    "id": "fc-agent-sdk-2",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d1-agent-sdk"
+    ],
+    "difficulty": "intro",
+    "status": "verified",
+    "question": "Is the Agent SDK a separate model or the same primitives programmatically?",
+    "answer": "The same primitives. It's not a new model or a fine-tuning service — it packages tools, context, loops, and MCP for programmatic agent construction."
+  },
+  {
+    "id": "fc-agent-orchestration-1",
+    "topicId": "agent-orchestration",
+    "skillIds": [
+      "d1-orchestration"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
+    "question": "What problem does a manager/subagent orchestration pattern solve?",
+    "answer": "It keeps the manager's context clean: subagents run in isolated context windows on delegated subtasks and return only distilled results, so intermediate tool output doesn't bloat the orchestrator's context."
+  },
+  {
+    "id": "fc-agent-orchestration-2",
+    "topicId": "agent-orchestration",
+    "skillIds": [
+      "d1-orchestration"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "What are hooks in an agent/Claude Code orchestration, and when do they run?",
+    "answer": "Hooks are user-defined shell commands (or prompts) that fire at lifecycle points (e.g. after a tool use), used to enforce standards or quality checks automatically without relying on the model to remember."
+  },
+  {
+    "id": "fc-workflow-vs-agent-1",
+    "topicId": "agent-loop",
+    "skillIds": [
+      "d1-workflow-vs-agent"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Workflow vs. agent — what's the deciding question?",
+    "answer": "Are the steps known in advance? If yes, a workflow (predefined code paths orchestrating LLM calls) is more reliable and cheaper. If the task needs the model to dynamically direct its own process and tool use, build an agent."
+  },
+  {
+    "id": "fc-workflow-vs-agent-2",
+    "topicId": "agent-loop",
+    "skillIds": [
+      "d1-workflow-vs-agent"
+    ],
+    "difficulty": "intro",
+    "status": "verified",
+    "question": "Is using tools enough to make something an 'agent'?",
+    "answer": "No. Both workflows and agents can call tools. The distinction is autonomy: an agent decides its own path; a workflow follows predefined steps."
+  },
+  {
+    "id": "fc-config-management-1",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d2-config-management"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Why pin an explicit model version in production instead of a floating alias?",
+    "answer": "Floating aliases (always-newest) can silently change model behavior underneath you. Pinning an explicit version keeps behavior stable and reproducible; you migrate deliberately after testing."
+  },
+  {
+    "id": "fc-config-management-2",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d2-config-management"
+    ],
+    "difficulty": "intro",
+    "status": "verified",
+    "question": "Where should configuration like model version and permissions live?",
+    "answer": "In managed configuration (e.g. pinned version constants, settings.json for permissions/options) — not scattered as magic strings, and never mixed with secrets, so changes are deliberate and auditable."
+  },
+  {
+    "id": "fc-config-hierarchy-1",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d3-config-hierarchy"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "How is CLAUDE.md layered, and what does settings.json hold?",
+    "answer": "CLAUDE.md is a hierarchy (project-level + user-level) so shared conventions live in the repo and personal ones per user. settings.json configures permissions, environment, options, and hook declarations."
+  },
+  {
+    "id": "fc-config-hierarchy-2",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d3-config-hierarchy"
+    ],
+    "difficulty": "intro",
+    "status": "verified",
+    "question": "Should API keys go in CLAUDE.md?",
+    "answer": "No. CLAUDE.md holds context and conventions, not secrets. Keep keys in environment variables or a secret manager."
+  },
+  {
+    "id": "fc-core-components-1",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d3-core-components"
+    ],
+    "difficulty": "intro",
+    "status": "verified",
+    "question": "Name the core components of Claude Code.",
+    "answer": "Rules, Skills, Commands, Agents, and Agent Memory."
+  },
+  {
+    "id": "fc-core-components-2",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d3-core-components"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "What is Agent Memory in Claude Code for?",
+    "answer": "It persists context across sessions, so durable facts and conventions survive between runs rather than being re-established each time."
+  },
+  {
+    "id": "fc-streaming-3",
+    "topicId": "streaming",
+    "skillIds": [
+      "d2-streaming"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "How do you assemble the final text from a streamed SSE response?",
+    "answer": "Concatenate the incremental content_block_delta events in order; message_start/message_stop bracket the stream and message_stop does not carry the whole text."
+  },
+  {
+    "id": "fc-batch-2",
+    "topicId": "streaming",
+    "skillIds": [
+      "d2-batch-vs-realtime"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "When do you choose the Batch API over realtime Messages calls?",
+    "answer": "For large, latency-insensitive bulk workloads where cost matters more than immediacy — Batch runs asynchronously at a lower price. Use realtime/streaming for interactive, low-latency needs."
+  },
+  {
+    "id": "fc-modes-2",
+    "topicId": "claude-code-debugging",
+    "skillIds": [
+      "d3-modes"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "How does headless Claude Code signal success or failure to CI?",
+    "answer": "Via the process exit code: 0 on success, non-zero on failure. Branch on the exit status, not on whether text was printed."
+  },
+  {
+    "id": "fc-error-id-2",
+    "topicId": "error-handling",
+    "skillIds": [
+      "d4-error-identification"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Given a failure, how do you tell an integration-layer bug from a model-output bug?",
+    "answer": "A malformed request / bad tool schema / mispaired tool_result (often a 400) is yours (integration). A well-formed request that returns wrong content is a prompt/context problem (model output). Read the trace before fixing."
+  },
+  {
+    "id": "fc-trace-2",
+    "topicId": "error-handling",
+    "skillIds": [
+      "d4-trace-analysis"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "A 400 'unexpected role' appears intermittently — where do you look first?",
+    "answer": "Your integration layer: inspect the exact messages[] you sent (role alternation, tool_use/tool_result pairing). A structural 400 is almost always the request you built, not the model."
+  },
+  {
+    "id": "fc-llm-fundamentals-2",
+    "topicId": "model-selection",
+    "skillIds": [
+      "d5-llm-fundamentals"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Why can identical requests return different completions?",
+    "answer": "Generation samples probabilistically from a distribution, so outputs are non-deterministic unless sampling is constrained (temperature 0 reduces but doesn't always eliminate variation). The stateless API isn't 'remembering' anything."
+  },
+  {
+    "id": "fc-context-mgmt-2",
+    "topicId": "prompt-context-engineering",
+    "skillIds": [
+      "d6-context-management"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
+    "question": "Name three context-lifecycle techniques for long agent sessions.",
+    "answer": "Compaction (summarize old turns), tool-result clearing (drop bulky results once consumed), and external memory (persist durable facts outside the window, re-inject only what's needed)."
+  },
+  {
+    "id": "fc-prompt-principles-2",
+    "topicId": "prompt-context-engineering",
+    "skillIds": [
+      "d6-prompt-principles"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Where do durable rules, the immediate task, and per-tool behavior each belong?",
+    "answer": "Durable rules/persona → system prompt; the immediate ask → user turn; per-tool behavior → the tool's description. Placement changes how reliably instructions are followed."
+  },
+  {
+    "id": "fc-prompt-injection-2",
+    "topicId": "security-safety",
+    "skillIds": [
+      "d7-prompt-injection"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
+    "question": "Direct vs. indirect prompt injection — what's the difference?",
+    "answer": "Direct: the user themselves instructs the model to misbehave. Indirect: malicious instructions ride in on content the agent ingests (RAG docs, web pages, tool output). Indirect is the higher-risk case for tool-holding agents."
+  },
+  {
+    "id": "fc-guardrails-2",
+    "topicId": "security-safety",
+    "skillIds": [
+      "d7-guardrails"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Why is 'please ignore malicious instructions' in the system prompt not a real guardrail?",
+    "answer": "It's a request, not a control — injection can override it. Durable defense is defense-in-depth: structural isolation of untrusted data, least-privilege tools, human approval for sensitive actions, and output validation."
+  },
+  {
+    "id": "fc-secrets-2",
+    "topicId": "security-safety",
+    "skillIds": [
+      "d7-secrets"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "How should API keys be handled in an LLM app?",
+    "answer": "Keep them out of prompts, code, and logs; store in environment variables or a secret manager, scope keys with least privilege, and rotate on exposure."
+  },
+  {
+    "id": "fc-mcp-servers-2",
+    "topicId": "mcp-and-tools",
+    "skillIds": [
+      "d8-mcp-servers"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "What does an MCP server expose, over which transports, and how do you test it?",
+    "answer": "Three primitives — tools, resources, prompts — over stdio (local child process) or HTTP (remote). Validate with the MCP Inspector before wiring it into an agent."
+  },
+  {
+    "id": "fc-agentic-2",
+    "topicId": "mcp-and-tools",
+    "skillIds": [
+      "d8-agentic-customization"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "How do you choose among built-in tool, custom tool, Skill, and MCP server?",
+    "answer": "Built-in if it already exists; custom (client-side) tool for app-specific one-off logic; Skill for reusable agent instructions; MCP server when a capability is shared across multiple apps (most maintainable)."
   }
 ]

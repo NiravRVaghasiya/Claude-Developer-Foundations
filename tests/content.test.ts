@@ -10,6 +10,9 @@ import {
 } from "@/lib/content";
 import { isMultiResponse } from "@/lib/content-types";
 import type { Flashcard, QuizQuestion } from "@/lib/content-types";
+import { blueprint } from "@content/blueprint";
+import { allSkillIds, validateContentMappings } from "@/lib/blueprint";
+import { validateAll } from "@/lib/content-validation";
 import flashcards from "@content/flashcards.json";
 import quiz from "@content/quiz.json";
 
@@ -123,5 +126,56 @@ describe("quiz.json integrity", () => {
     for (const q of questions) {
       expect(isMultiResponse(q)).toBe(q.correctIds.length > 1);
     }
+  });
+});
+
+describe("blueprint mapping integrity", () => {
+  it("every topic maps to at least one real blueprint skill", () => {
+    const valid = allSkillIds(blueprint);
+    for (const t of getAllTopics()) {
+      expect((t.skillIds ?? []).length, `topic ${t.id} has no skillIds`).toBeGreaterThan(0);
+      for (const id of t.skillIds ?? []) {
+        expect(valid.has(id), `topic ${t.id} bad skillId ${id}`).toBe(true);
+      }
+    }
+  });
+
+  it("every flashcard and question maps to real blueprint skills", () => {
+    const valid = allSkillIds(blueprint);
+    for (const c of cards) {
+      expect((c.skillIds ?? []).length, `card ${c.id} has no skillIds`).toBeGreaterThan(0);
+      for (const id of c.skillIds ?? []) {
+        expect(valid.has(id), `card ${c.id} bad skillId ${id}`).toBe(true);
+      }
+    }
+    for (const q of questions) {
+      expect((q.skillIds ?? []).length, `question ${q.id} has no skillIds`).toBeGreaterThan(0);
+      for (const id of q.skillIds ?? []) {
+        expect(valid.has(id), `question ${q.id} bad skillId ${id}`).toBe(true);
+      }
+    }
+  });
+
+  it("has no dangling references or unmapped units (validateContentMappings)", () => {
+    const { errors } = validateContentMappings({
+      bp: blueprint,
+      topics: getAllTopics(),
+      flashcards: cards,
+      quiz: questions,
+    });
+    expect(errors).toEqual([]);
+  });
+});
+
+describe("strict content validation (validateAll)", () => {
+  it("the real content set has zero validation errors", () => {
+    const { errors } = validateAll({
+      blueprint,
+      topics: getAllTopics(),
+      flashcards: cards,
+      quiz: questions,
+    });
+    // Surface the actual errors in the assertion message if any appear.
+    expect(errors, errors.join("\n")).toEqual([]);
   });
 });

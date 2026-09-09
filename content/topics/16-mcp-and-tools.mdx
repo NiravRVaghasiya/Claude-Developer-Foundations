@@ -1,0 +1,72 @@
+## Core Concept
+
+The **Model Context Protocol (MCP)** is an open standard for connecting Claude to external tools and data through a uniform interface, so you don't hand-write a bespoke integration for every service. An **MCP server** exposes three primitives to any compliant client: **tools** (functions the model can call), **resources** (data the model can read), and **prompts** (reusable templates). Servers communicate over **stdio** (a local child process) or **HTTP** (remote/streamable).
+
+The broader skill is **choosing the right customization mechanism**. You have four options — built-in tools, custom (client-side) tools, Skills, and MCP servers — and the exam favors picking by **reusability and maintainability**, not by what's easiest to hack together once.
+
+## Key Facts & Mechanics
+
+- **MCP primitives:** `tools`, `resources`, `prompts`. That triple is essentially the whole protocol surface.
+- **Transports:** `stdio` (simplest; server runs as a local child process of the client) and HTTP (for remote services). Pick stdio for local integrations, HTTP for networked ones.
+- MCP standardizes access so **one server works across many clients/apps** — that reusability is the reason to prefer it over a one-off custom tool when the capability is shared.
+- **Custom (client-side) tools** are executed by *your* code via the `tool_use → tool_result` handshake; good for app-specific logic that isn't worth a server.
+- **Built-in tools** are provided by the platform; reach for them before building anything custom.
+- **Skills** package reusable instructions/capabilities for Claude Code and agents.
+- Test MCP servers with the **MCP Inspector** before wiring them into an agent.
+
+## Annotated Code
+
+```python
+# A minimal MCP server exposes named tools; the framework handles the JSON-RPC
+# transport (stdio here). The model calls "get_weather"; your handler runs it.
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("weather")
+
+@mcp.tool()
+def get_weather(city: str) -> str:
+    """Return the current weather for a city."""   # description guides tool choice
+    return lookup_weather(city)
+
+if __name__ == "__main__":
+    mcp.run(transport="stdio")   # local child-process transport
+```
+
+## Choosing a mechanism
+
+| Mechanism | Runs where | Best when |
+|---|---|---|
+| Built-in tool | Platform | The capability already exists — don't rebuild it |
+| Custom (client-side) tool | Your app code | App-specific logic, not shared across apps |
+| Skill | Claude Code / agent | Reusable instructions/capability for the agent |
+| MCP server | Separate process (stdio/HTTP) | A capability shared across multiple apps/clients; standard integration |
+
+## Mental Model
+
+MCP is a **USB-C port for tools**: instead of a custom cable per device, any compliant client plugs into any compliant server. If a capability will be reused across apps, build the standard port (MCP). If it's a one-off specific to this app, a custom client-side tool is fine.
+
+## Common Traps
+
+<Callout type="trap" title="Custom tool for a shared capability">
+**Trap:** Writing a bespoke client-side tool for something several applications need. It works once but multiplies maintenance. When the capability is shared, an **MCP server** gives one reusable, standard integration.
+</Callout>
+
+<Callout type="trap" title="Building what already exists">
+**Trap:** Hand-rolling a custom tool when a **built-in** tool already covers it. Check built-ins first — least code, least maintenance.
+</Callout>
+
+## Exam Tips
+
+- Memorize the MCP triple: **tools, resources, prompts** — over **stdio or HTTP**.
+- "Most **maintainable** across multiple applications" → **MCP server**. One-off app logic → custom tool. Already provided → built-in.
+- stdio = local child process; HTTP = remote.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario: Three Apps, One Integration" prompt="Three internal apps all need to query the same inventory database through Claude. A dev proposes copying the same client-side tool into each app. What's the more maintainable design?">
+Copying the tool into three codebases triples the maintenance and drift risk. Because the capability is **shared across apps**, expose it once as an **MCP server** (a `query_inventory` tool, plus perhaps inventory `resources`), and have each app connect as an MCP client. One integration to build, test, and update — the reusability/maintainability answer the exam rewards.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario: Local vs Remote Transport" prompt="You're building an MCP server that wraps a CLI tool on the developer's own machine. Which transport, and why?">
+Use **stdio**. The server runs as a local child process of the client, which is the simplest transport and fits a machine-local integration with no network exposure. Reserve HTTP for servers that must be reached remotely or shared over a network.
+</RevealAnswer>

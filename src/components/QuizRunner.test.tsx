@@ -80,6 +80,14 @@ describe("QuizRunner", () => {
     ).toBe(2);
   });
 
+  it("moves focus to the score heading after submit", () => {
+    render(<QuizRunner questions={questions} />);
+    fireEvent.click(screen.getByText("Right one"));
+    fireEvent.click(screen.getByRole("button", { name: /submit quiz/i }));
+    const heading = screen.getByText("Your score");
+    expect(document.activeElement).toBe(heading);
+  });
+
   it("single-response only keeps one selection", () => {
     render(<QuizRunner questions={questions} />);
     const q1 = screen.getByText("Single question?").closest("li") as HTMLElement;

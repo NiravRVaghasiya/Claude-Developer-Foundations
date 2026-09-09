@@ -12,9 +12,12 @@ export interface SidebarProps {
 
 const PRIMARY_LINKS = [
   { href: "/", label: "Dashboard", icon: "🏠" },
+  { href: "/diagnostic", label: "Diagnostic", icon: "🎯" },
+  { href: "/plan", label: "Study Plan", icon: "🗺️" },
   { href: "/topics", label: "All Topics", icon: "📚" },
   { href: "/flashcards", label: "Flashcards", icon: "🃏" },
   { href: "/quiz", label: "Practice Quiz", icon: "📝" },
+  { href: "/exam", label: "Exam Simulator", icon: "⏱️" },
 ];
 
 export function Sidebar({ groups, onNavigate }: SidebarProps) {

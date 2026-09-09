@@ -13,9 +13,21 @@
   - Cache **read / refresh** = **0.1×** base input
 - **Cache reads and refreshes are FREE to refresh the clock** — every hit resets the TTL at no extra cost.
 - **Up to 4 cache breakpoints** per request. **Lookback window = 20 blocks.**
-- **Minimum cacheable length** (or the block is silently not cached, no error): commonly **1,024 tokens** (Sonnet/Haiku-class), **512 tokens** (Opus 5 / Fable / Mythos).
+- **Minimum cacheable length** is **per-model** — below it, `cache_control` is silently ignored (no error, no savings). The minimums are **not monotonic** across versions, so look up your exact model rather than assuming "newer = smaller":
+
+| Minimum cacheable tokens | Models |
+|---|---|
+| 512 | Claude Opus 5 |
+| 1,024 | Claude Opus 4.8, Claude Sonnet 5 |
+| 2,048 | Claude Opus 4.7, Claude Haiku 3.5 |
+| 4,096 | Claude Opus 4.6, Claude Opus 4.5, Claude Haiku 4.5 |
+
 - **Prefix order is fixed:** `tools` → `system` → `messages`.
 - Verify a cache hit via `response.usage`: `cache_creation_input_tokens` (write) and `cache_read_input_tokens` (read). If both are `0`, nothing was cached.
+
+<Callout type="note" title="Newer isn't always a smaller minimum">
+The per-model minimum dropped to **512 on Opus 5** (down from 1,024 on Opus 4.8), but earlier 4.x models and Haiku-class models sit at 2,048 or 4,096. Always confirm the current figure for your pinned model in the official prompt-caching reference before assuming a short prefix will cache.
+</Callout>
 
 ## Annotated Code
 

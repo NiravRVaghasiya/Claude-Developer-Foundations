@@ -12,8 +12,39 @@ export type TopicDomain =
   | "Applications & Integration"
   | "Model Selection & Optimization"
   | "Agents & Workflows"
+  | "Prompt & Context Engineering"
+  | "Security & Safety"
   | "Tools & MCPs"
+  | "Claude Code & Ops"
   | "Exam Strategy";
+
+/**
+ * Provenance/verification status for a factual content unit.
+ * - "verified": every claim has a sourced entry in `evidence`.
+ * - "needs-review": a claim is unsourced/ambiguous and must not be treated as fact yet.
+ */
+export type ContentStatus = "verified" | "needs-review";
+
+/** Relative difficulty of a learning unit or question. */
+export type Difficulty = "intro" | "core" | "advanced";
+
+/** Bloom-style cognitive level a question exercises. */
+export type CognitiveLevel = "recall" | "application" | "analysis";
+
+/**
+ * A single sourced evidence entry backing a factual claim. Provenance is
+ * mandatory for the platform's trustworthiness; see the Phase 01 claims ledger.
+ */
+export interface Evidence {
+  /** Human-readable source label, e.g. "Anthropic — Prompt caching". */
+  source: string;
+  /** Canonical URL of the authoritative source. */
+  url: string;
+  /** ISO date (YYYY-MM-DD) the claim was verified against the source. */
+  verifiedOn: string;
+  /** Optional clarifying note (e.g. which figure/behavior this supports). */
+  note?: string;
+}
 
 /** Ordered metadata describing a single study topic. */
 export interface Topic {
@@ -33,6 +64,19 @@ export interface Topic {
   source: "CCDV-F Study Notes.md" | "CCDV-F Study Notes2.md";
   /** Display order across the whole site. */
   order: number;
+
+  // --- Phase 01 blueprint/provenance metadata (optional at the type level;
+  //     completeness is enforced by content validation, not the compiler). ---
+  /** Blueprint skill ids this topic teaches; must resolve to `content/blueprint.ts`. */
+  skillIds?: string[];
+  /** Relative difficulty of the topic. */
+  difficulty?: Difficulty;
+  /** One-line learning objective ("After this topic, a learner can…"). */
+  objective?: string;
+  /** Sourced evidence backing the topic's factual claims. */
+  evidence?: Evidence[];
+  /** Verification status; "needs-review" when a claim is not yet fully sourced. */
+  status?: ContentStatus;
 }
 
 /** A single Q/A flashcard for active recall. */
@@ -45,6 +89,16 @@ export interface Flashcard {
   question: string;
   /** The answer revealed on the back of the card. */
   answer: string;
+
+  // --- Phase 01 blueprint/provenance metadata (optional; validated for completeness). ---
+  /** Blueprint skill ids this card drills; must resolve to `content/blueprint.ts`. */
+  skillIds?: string[];
+  /** Relative difficulty of the card. */
+  difficulty?: Difficulty;
+  /** Sourced evidence backing the card's answer. */
+  evidence?: Evidence[];
+  /** Verification status; "needs-review" when a claim is not yet fully sourced. */
+  status?: ContentStatus;
 }
 
 /** A single selectable option in a quiz question. */
@@ -75,6 +129,18 @@ export interface QuizQuestion {
    * right or wrong (mirrors the notes' answer-key rationale).
    */
   explanations: Record<string, string>;
+
+  // --- Phase 01 blueprint/provenance metadata (optional; validated for completeness). ---
+  /** Blueprint skill ids this question assesses; must resolve to `content/blueprint.ts`. */
+  skillIds?: string[];
+  /** Relative difficulty of the question. */
+  difficulty?: Difficulty;
+  /** Cognitive level the question exercises (recall/application/analysis). */
+  cognitiveLevel?: CognitiveLevel;
+  /** Sourced evidence backing the correct answer / explanations. */
+  evidence?: Evidence[];
+  /** Verification status; "needs-review" when a claim is not yet fully sourced. */
+  status?: ContentStatus;
 }
 
 /** True when a quiz question expects more than one selected answer. */

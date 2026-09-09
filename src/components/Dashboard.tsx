@@ -5,6 +5,10 @@ import { useLocalStorage } from "@/lib/useLocalStorage";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import type { FlashcardMarks } from "@/lib/flashcards";
 import { countKnown, percent, summarize } from "@/lib/progress";
+import {
+  latestAttempt,
+  type DiagnosticAttempt,
+} from "@/lib/diagnostic-history";
 
 function ProgressBar({ value }: { value: number }) {
   return (
@@ -41,6 +45,11 @@ export function Dashboard({
     STORAGE_KEYS.quizBestTotal,
     0
   );
+  const [diagHistory, , diagHydrated] = useLocalStorage<DiagnosticAttempt[]>(
+    STORAGE_KEYS.diagnosticHistory,
+    []
+  );
+  const latestDiag = latestAttempt(diagHistory);
 
   const topicsViewed = viewed.length;
   const cardsKnown = countKnown(marks);
@@ -96,6 +105,36 @@ export function Dashboard({
         <ProgressBar value={viewedHydrated ? overall : 0} />
       </section>
 
+      {/* Diagnostic readiness */}
+      <section className="mb-8 rounded-xl border border-neutral-200 p-6 dark:border-neutral-800">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Diagnostic readiness</h2>
+          <Link
+            href="/diagnostic"
+            className="text-sm font-medium text-brand-fg underline underline-offset-2 dark:text-amber-400"
+          >
+            {diagHydrated && latestDiag ? "Retake" : "Take diagnostic"} →
+          </Link>
+        </div>
+        {diagHydrated && latestDiag ? (
+          <div className="mt-2">
+            <p className="text-2xl font-bold text-brand-fg dark:text-amber-400">
+              {latestDiag.readinessIndex === null
+                ? "—"
+                : `${latestDiag.readinessIndex}/100`}
+            </p>
+            <p className="text-sm text-neutral-500">
+              Last attempt: {latestDiag.correct}/{latestDiag.total} correct.
+              Study-readiness estimate, not a pass prediction.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-neutral-500">
+            Take a diagnostic to see your strengths and gaps by exam domain.
+          </p>
+        )}
+      </section>
+
       {/* Three tracked dimensions */}
       <section className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-neutral-200 p-5 dark:border-neutral-800">
@@ -143,9 +182,12 @@ export function Dashboard({
       {/* Quick actions */}
       <section className="mt-8 grid gap-4 sm:grid-cols-3">
         {[
+          { href: "/diagnostic", label: "Run diagnostic", icon: "🎯" },
+          { href: "/plan", label: "View study plan", icon: "🗺️" },
           { href: "/topics", label: "Browse topics", icon: "📚" },
           { href: "/flashcards", label: "Drill flashcards", icon: "🃏" },
           { href: "/quiz", label: "Take the quiz", icon: "📝" },
+          { href: "/exam", label: "Exam simulator", icon: "⏱️" },
         ].map((a) => (
           <Link
             key={a.href}

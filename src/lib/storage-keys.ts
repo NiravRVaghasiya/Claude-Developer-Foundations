@@ -10,4 +10,8 @@ export const STORAGE_KEYS = {
   quizBestScore: "ccdvf:quiz-best-score",
   /** number — total questions in the best-scored attempt. */
   quizBestTotal: "ccdvf:quiz-best-total",
+  /** DiagnosticAttempt[] — most-recent-first, capped history of diagnostic runs. */
+  diagnosticHistory: "ccdvf:diagnostic-history",
+  /** ExamSession | null — the in-progress exam simulation (autosaved). */
+  examSession: "ccdvf:exam-session",
 } as const;

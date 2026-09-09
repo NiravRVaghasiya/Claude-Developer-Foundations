@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "fetch": {
+      "disabled": false
+    }
+  }
+}

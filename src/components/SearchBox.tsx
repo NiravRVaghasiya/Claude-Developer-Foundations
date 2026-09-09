@@ -39,6 +39,13 @@ export function SearchBox() {
 
   const showResults = open && query.trim().length >= 2;
 
+  // Polite announcement of result count for screen-reader users.
+  const announcement = !showResults
+    ? ""
+    : hits.length === 0
+      ? `No matches for ${query}.`
+      : `${hits.length} result${hits.length === 1 ? "" : "s"} for ${query}.`;
+
   return (
     <div ref={containerRef} className="relative w-full max-w-xs">
       <input
@@ -51,8 +58,17 @@ export function SearchBox() {
         onFocus={() => setOpen(true)}
         placeholder="Search topics…"
         aria-label="Search topics"
-        className="w-full rounded-md border border-neutral-300 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-brand/60 dark:border-neutral-700"
+        role="combobox"
+        aria-expanded={showResults}
+        aria-controls="search-results"
+        aria-autocomplete="list"
+        className="w-full rounded-md border border-neutral-300 bg-transparent px-3 py-1.5 text-sm focus:border-brand/60 dark:border-neutral-700"
       />
+
+      {/* Visually-hidden live region announcing result counts. */}
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
 
       {showResults ? (
         <div className="absolute left-0 right-0 z-40 mt-1 max-h-96 overflow-y-auto rounded-lg border border-neutral-200 bg-white shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
@@ -61,9 +77,9 @@ export function SearchBox() {
               No matches for &ldquo;{query}&rdquo;.
             </p>
           ) : (
-            <ul>
+            <ul id="search-results" role="listbox" aria-label="Search results">
               {hits.map((hit) => (
-                <li key={hit.record.id}>
+                <li key={hit.record.id} role="option" aria-selected={false}>
                   <Link
                     href={`/topics/${hit.record.slug}`}
                     onClick={() => {

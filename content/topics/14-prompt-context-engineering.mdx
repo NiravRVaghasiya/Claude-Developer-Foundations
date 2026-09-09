@@ -1,0 +1,77 @@
+## Core Concept
+
+**Prompt engineering** is how you word a single request; **context engineering** is how you curate the *entire* set of tokens the model sees during inference — system prompt, tool definitions, retrieved documents, prior turns, tool results, and memory. On long-running agents the second one dominates: the window is finite, and quality degrades as it fills with stale or low-signal tokens. The job is to keep the **highest-signal, smallest** context that still answers the task.
+
+Two ideas do most of the work:
+
+1. **Placement** — where an instruction lives changes how reliably it's followed. Durable rules belong in the **system** prompt; the task belongs in the **user** turn; per-tool behavior belongs in the **tool description**.
+2. **Lifecycle** — for agents, actively manage the window over time with **compaction** (summarize old turns), **tool-result clearing** (drop bulky results once consumed), and **memory** (persist durable facts outside the window).
+
+## Key Facts & Mechanics
+
+- The context window is large but **not infinite**; long inputs degrade recall ("context rot"), so more tokens is not always better.
+- **Instruction placement** (system vs. user vs. tool description) is a common exam theme — put standing rules in `system`, the immediate ask in the `user` turn.
+- **Few-shot examples** steer format and tone; keep them representative and minimal.
+- **Structured output + defensive parsing** belong to this domain too: constrain the shape, then validate what comes back instead of trusting it.
+- Agent context strategies (from Anthropic's context-engineering guidance): **compaction**, **tool-result clearing**, and **external memory**.
+
+## Annotated Code
+
+```python
+# Placement: durable rules in system; the task in the user turn; nothing volatile
+# baked into the "standing instructions".
+response = client.messages.create(
+    model="claude-sonnet-5",
+    max_tokens=1024,
+    system=(
+        "You are a support triage assistant. "
+        "Always answer in <=3 sentences. Never invent order IDs."   # DURABLE rules
+    ),
+    messages=[
+        {"role": "user", "content": "Where is order 55123?"}        # the immediate TASK
+    ],
+)
+
+# Context lifecycle for a long agent loop (sketch):
+#   - after N turns, replace old turns with a short summary   (compaction)
+#   - once a large tool_result has been used, drop it          (tool-result clearing)
+#   - write durable facts to a store and re-inject only what's needed (memory)
+```
+
+## Instruction placement reference
+
+| Put it here | For | Example |
+|---|---|---|
+| `system` | Durable persona, rules, constraints | "Never reveal internal IDs." |
+| `user` turn | The immediate task/question | "Summarize this ticket." |
+| Tool `description` | How/when to use a specific tool | "Use only for refunds under $50." |
+
+## Mental Model
+
+Think of the context window as a **desk, not a warehouse**. Everything you pile on the desk competes for attention; the useful document gets buried under yesterday's scratch paper. Context engineering is the habit of keeping only what the current task needs on the desk — filing the rest into memory and sweeping away spent tool output.
+
+## Common Traps
+
+<Callout type="trap" title="More context = better answers">
+**Trap:** Stuffing the whole knowledge base into every request "just in case." Beyond a point, extra tokens *lower* recall and raise cost/latency. Curate: retrieve the relevant slice, summarize the rest.
+</Callout>
+
+<Callout type="trap" title="Rules in the user turn">
+**Trap:** Putting durable rules ("always answer in JSON") in each user message. They get diluted and inconsistently followed. Standing rules belong in the **system** prompt; the user turn is for the task.
+</Callout>
+
+## Exam Tips
+
+- Placement questions are common: the answer is usually **system for durable rules, user for the task, tool description for tool-specific behavior**.
+- For "the agent slows down / loses the thread over a long session," think **context management** (compaction / clearing / memory), not "use a bigger model."
+- Prefer **structured output + validation** over trusting free-form text.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario: The Drifting Agent" prompt="A research agent works well for the first 20 tool calls, then starts repeating steps and ignoring earlier findings. The window is filling with raw tool output. What's the fix?">
+This is a **context management** problem, not a model problem. As the window fills with bulky tool results, high-signal earlier findings get crowded out and recall drops. **Fix:** compact old turns into a running summary, clear large tool results once they've been consumed, and persist durable findings to external memory, re-injecting only what the current step needs. Reaching for a bigger model without managing context just delays the same failure.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario: Inconsistent Format" prompt="Your app asks for JSON in every user message, but ~10% of responses still come back as prose. Where should the instruction live, and what else helps?">
+Move the "respond only with JSON" rule into the **system** prompt so it's a standing constraint rather than a per-turn request, and back it with a **structured-output** technique (tool `input_schema` / structured outputs) plus **defensive parsing** on your side. Placement + enforcement beats repeating the ask in the user turn.
+</RevealAnswer>
