@@ -474,6 +474,66 @@ export const topics: Topic[] = [
       },
     ],
   },
+  {
+    id: "evaluation-testing-debugging",
+    slug: "evaluation-testing-debugging",
+    title: "Evaluation, Testing & Debugging",
+    summary:
+      "Evals and golden datasets, unit vs. integration vs. eval, grading methods (exact/assertion/model-graded), reproducibility under non-determinism, and the integration-vs-model-output debugging decision tree.",
+    domain: "Claude Code & Ops",
+    file: "19-evaluation-testing-debugging.mdx",
+    source: "CCDV-F Study Notes2.md",
+    order: 19,
+    skillIds: ["d4-error-identification", "d4-trace-analysis"],
+    difficulty: "core",
+    objective:
+      "Build and run regression evals, pick the right test type (unit/integration/eval) and grading method, reason about reproducibility, and isolate whether a failure is in the integration layer or the model output.",
+    status: "verified",
+    evidence: [
+      {
+        source: "Anthropic — Create strong empirical evaluations",
+        url: "https://platform.claude.com/docs/en/test-and-evaluate/develop-tests",
+        verifiedOn: "2026-09-09",
+        note: "Eval datasets, grading methods (code / model-graded), and regression testing.",
+      },
+      {
+        source: "Anthropic — Reducing latency & non-determinism / temperature",
+        url: "https://platform.claude.com/docs/en/api/messages",
+        verifiedOn: "2026-09-09",
+        note: "temperature and non-determinism behavior for reproducibility.",
+      },
+    ],
+  },
+  {
+    id: "claude-code",
+    slug: "claude-code",
+    title: "Claude Code (Config & Modes)",
+    summary:
+      "The Claude Code component model — CLAUDE.md hierarchy, Rules, Skills, Commands, Agents, Hooks — plus settings.json permissions, session/headless/streaming modes, and MCP integration.",
+    domain: "Claude Code & Ops",
+    file: "20-claude-code.mdx",
+    source: "CCDV-F Study Notes2.md",
+    order: 20,
+    skillIds: ["d3-core-components", "d3-config-hierarchy", "d3-modes"],
+    difficulty: "core",
+    objective:
+      "Distinguish CLAUDE.md, Rules, Skills, Commands, Agents, and Hooks by their trigger, configure least-privilege permissions in settings.json, and operate interactive vs. headless vs. streaming modes.",
+    status: "verified",
+    evidence: [
+      {
+        source: "Anthropic — Claude Code settings & memory (CLAUDE.md hierarchy)",
+        url: "https://code.claude.com/docs/en/settings",
+        verifiedOn: "2026-09-09",
+        note: "CLAUDE.md hierarchy, settings.json permissions, and configuration model.",
+      },
+      {
+        source: "Anthropic — Run Claude Code programmatically (headless)",
+        url: "https://code.claude.com/docs/en/headless",
+        verifiedOn: "2026-09-09",
+        note: "Headless mode, exit codes, and output formats.",
+      },
+    ],
+  },
 ];
 
 export default topics;

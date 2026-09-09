@@ -35,6 +35,24 @@ The platform supports a full study loop, all client-side:
 > traceable evidence — not reproduced exam content. See
 > [`docs/phases/01-claims-ledger.md`](docs/phases/01-claims-ledger.md).
 
+## Study & revision resources
+
+Beyond the interactive app, the repo ships a complete, blueprint-mapped set of
+revision documents. Every current CCDV-F objective is covered (**0 missing**), and
+the question bank holds **163 original scenario questions** (~40% exam-level),
+weighted to the official domain distribution.
+
+| Resource | What it is |
+|---|---|
+| [`CCDV-F-OBJECTIVE-MATRIX.md`](./CCDV-F-OBJECTIVE-MATRIX.md) | Every one of the 29 objectives → domain, weight, coverage, material, status (0 MISSING) |
+| [`STUDY-PLAN.md`](./STUDY-PLAN.md) | 7-day, 14-day, and 30-day plans prioritized by **exam weight × your weakness** |
+| [`READINESS-CHECKLIST.md`](./READINESS-CHECKLIST.md) | 0–5 self-scorecard for all 29 objectives with a weighted readiness formula and bands (study heuristic, not a pass prediction) |
+| [`SOURCES.md`](./SOURCES.md) | Tiered, dated source list (official → secondary) and the provenance model |
+| [`cheat-sheets/`](./cheat-sheets/) | 13 one-to-two-page "what it is → when → key mechanics → traps" sheets, one per domain area |
+| [`architecture-patterns/`](./architecture-patterns/) | Mermaid diagrams (Messages API, tool loop, agent loop, MCP, multi-agent, security trust boundary, escalation ladder) + 12 fast-revision comparison tables |
+| [`common-traps/`](./common-traps/) | 59 verified certification traps + a **"What the exam is really testing"** reasoning guide |
+| [`mock-exams/`](./mock-exams/) | Three seeded, full-length, blueprint-weighted mock exams (via the simulator) plus a diagnostic |
+
 ## Tech Stack
 
 | Concern | Choice |
@@ -115,6 +133,16 @@ src/
   components/            # UI (AppShell, Sidebar, FlashcardDeck, QuizRunner, Dashboard, SearchBox, mdx/*)
   lib/                   # content loader + types, quiz/flashcards/srs/progress/search logic, useLocalStorage
 mdx-components.tsx       # global MDX component map (styled HTML + Callout/RevealAnswer)
+
+# Revision resources (Markdown; not part of the app build)
+CCDV-F-OBJECTIVE-MATRIX.md # objective coverage matrix (29/29 objectives)
+STUDY-PLAN.md              # 7 / 14 / 30-day plans
+READINESS-CHECKLIST.md     # 0-5 readiness scorecard
+SOURCES.md                 # tiered, dated sources + provenance model
+cheat-sheets/              # per-domain quick-reference sheets
+architecture-patterns/     # Mermaid diagrams + comparison tables
+common-traps/              # 59 traps + "what the exam is really testing"
+mock-exams/                # weighted mock-exam + diagnostic guide
 ```
 
 ## Editing the Content

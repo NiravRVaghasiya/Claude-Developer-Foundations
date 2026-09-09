@@ -631,5 +631,93 @@
     "status": "verified",
     "question": "How do you choose among built-in tool, custom tool, Skill, and MCP server?",
     "answer": "Built-in if it already exists; custom (client-side) tool for app-specific one-off logic; Skill for reusable agent instructions; MCP server when a capability is shared across multiple apps (most maintainable)."
+  },
+  {
+    "id": "fc-eval-1",
+    "topicId": "evaluation-testing-debugging",
+    "skillIds": [
+      "d4-trace-analysis"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "A request returns 200 with a well-formed response whose content is wrong. Which layer owns the bug — integration or model output?",
+    "answer": "Model output. A well-formed request + 200 means the plumbing worked; the fault is in the prompt/context/model, so investigate those (and your evals), not the request code. A structural 400 would be the opposite — an integration bug you own."
+  },
+  {
+    "id": "fc-eval-2",
+    "topicId": "evaluation-testing-debugging",
+    "skillIds": [
+      "d4-error-identification"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Why isn't 'I tried the new prompt once and it looked good' enough before shipping a prompt change?",
+    "answer": "One trial is anecdote, not evidence. Re-run a golden eval dataset with expected outputs; only the dataset reveals the regressions a single success hides. Grade deterministic fields by exact/assertion match and open-ended answers with a validated model-graded rubric."
+  },
+  {
+    "id": "fc-eval-3",
+    "topicId": "evaluation-testing-debugging",
+    "skillIds": [
+      "d4-trace-analysis"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
+    "question": "Which test type answers which question: unit vs integration vs eval?",
+    "answer": "Unit = 'is my code correct?' (pure functions). Integration = 'do the pieces wire together?' (request/response + tool loop, mock the API). Eval = 'is the model behaving?' (non-deterministic output graded on properties). Match the test to the question."
+  },
+  {
+    "id": "fc-eval-4",
+    "topicId": "evaluation-testing-debugging",
+    "skillIds": [
+      "d4-error-identification"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
+    "question": "Does temperature: 0 guarantee byte-identical outputs you can assert on exactly?",
+    "answer": "No. temperature 0 is greedy and improves reproducibility, but output is still not guaranteed identical across runs/versions. Assert on properties (valid JSON, correct label, contains the fact), never on an exact response string."
+  },
+  {
+    "id": "fc-cc-1",
+    "topicId": "claude-code",
+    "skillIds": [
+      "d3-core-components"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "Skills vs Commands in Claude Code — what's the distinguishing difference?",
+    "answer": "The trigger. Skills are MODEL-invoked when a task matches; Commands (slash, e.g. /review) are USER-invoked by typing them. Both are reusable, but who pulls the trigger is the exam's distinction."
+  },
+  {
+    "id": "fc-cc-2",
+    "topicId": "claude-code",
+    "skillIds": [
+      "d3-config-hierarchy"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "You need a check to run every time Claude Code edits a file, guaranteed. CLAUDE.md instruction or a Hook?",
+    "answer": "A Hook (e.g. a PostToolUse hook in settings.json). Hooks fire deterministically on the event; a CLAUDE.md line is only guidance the model may skip. Use permissions in settings.json for least privilege."
+  },
+  {
+    "id": "fc-cc-3",
+    "topicId": "claude-code",
+    "skillIds": [
+      "d3-modes"
+    ],
+    "difficulty": "core",
+    "status": "verified",
+    "question": "In CI, how does a headless Claude Code run (claude -p) signal success?",
+    "answer": "Via the process exit code: 0 = success, non-zero = failure. Branch on the exit status, not on whether it printed text to stdout."
+  },
+  {
+    "id": "fc-cc-4",
+    "topicId": "claude-code",
+    "skillIds": [
+      "d3-config-hierarchy"
+    ],
+    "difficulty": "advanced",
+    "status": "verified",
+    "question": "How does the CLAUDE.md hierarchy resolve conflicts between shared and personal context?",
+    "answer": "It layers like CSS: broader scopes (enterprise/user) set defaults, and the more specific file (project, then subdirectory) wins on conflict. Commit shared conventions in the project CLAUDE.md; keep personal overrides out of git."
   }
 ]

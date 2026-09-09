@@ -1,0 +1,150 @@
+## Core Concept
+
+**Claude Code** is Anthropic's agentic coding tool that runs in your terminal (and
+CI). For the exam you need its **configuration model** — the layered files and
+components that shape its behavior — and its **operating modes**. The recurring
+question is *"which mechanism does this job?"*: people confuse `CLAUDE.md`, Rules,
+Skills, Commands, Agents, and Hooks because they overlap.
+
+The mental split: **`CLAUDE.md` and Rules are standing context/instructions**;
+**Skills, Commands, and Agents are reusable capabilities**; **Hooks are
+deterministic automation** that fire on events regardless of what the model
+"decides."
+
+## Key Facts & Mechanics
+
+- **`CLAUDE.md` (project memory):** a Markdown file the tool loads automatically as
+  standing context — conventions, architecture notes, how to build/test. It is
+  **hierarchical**: enterprise/global → user (`~/.claude/`) → project (repo root) →
+  subdirectory, with more specific files layering on top of broader ones. Shared
+  project conventions live in the repo; personal preferences live in the user file.
+- **Rules:** scoped instruction files that constrain behavior (always-on, or
+  activated by file match / on demand). Think "policy the agent must follow,"
+  distinct from freeform `CLAUDE.md` prose.
+- **Skills:** packaged, reusable capability bundles (instructions plus optional
+  scripts/resources) that the agent invokes **when a task matches** — model-invoked,
+  not hand-typed.
+- **Commands (slash commands):** **user-invoked** shortcuts (e.g. `/review`) that
+  expand into a predefined prompt/workflow. You trigger them explicitly.
+- **Agents (subagents):** specialized configurations with their own prompt and tool
+  scope that the main agent can **delegate** to, each running in its **own context
+  window** so a subagent's noisy exploration doesn't pollute the manager's context.
+- **Hooks:** user-defined shell commands (or prompts) that fire **deterministically**
+  at lifecycle points (e.g. before/after a tool runs, on file save). They enforce
+  checks without relying on the model to "remember" — a `PreToolUse` hook can even
+  block an action.
+- **`settings.json`:** configures **permissions** (which tools/paths are allowed),
+  environment, and options; hooks are declared here. Least privilege lives here.
+- **Session management & modes:**
+  - **Interactive** — the normal terminal REPL.
+  - **Headless / programmatic (`-p`)** — one-shot, non-interactive, for **CI and
+    scripts**. It signals success via **exit code** (0 = success, non-zero =
+    failure), so pipelines branch on the status, not on stdout text.
+  - **Streaming output** — stream results (e.g. JSON) for tooling to consume.
+- **MCP integration:** Claude Code consumes **MCP servers** to gain external tools
+  and data, configured alongside its other settings — the same MCP mechanism used
+  by the Agent SDK.
+
+## Which mechanism? — the table the exam is built on
+
+| Mechanism | Who triggers it | What it is | Use it for |
+|---|---|---|---|
+| **`CLAUDE.md`** | Auto-loaded | Standing project/user context (Markdown) | Conventions, architecture, build/test commands |
+| **Rules** | Auto / scoped | Constraints the agent must follow | Policy, guardrails, do/don't |
+| **Skills** | Model-invoked on match | Reusable capability bundle | A repeatable *how-to* the agent applies when relevant |
+| **Commands** | **User-invoked** (`/name`) | Saved prompt/workflow | Shortcuts you fire on demand |
+| **Agents** | Delegated by main agent | Subagent w/ own prompt + tools + context | Isolating a specialized sub-task |
+| **Hooks** | **Event, deterministic** | Shell command at a lifecycle point | Enforcing lint/tests/approval regardless of model choice |
+
+## Annotated Code
+
+```bash
+# Headless mode in CI: branch on the EXIT CODE, capture output for triage.
+claude -p "Run the test suite and summarize failures" --output-format json > result.json
+if [ $? -ne 0 ]; then          # non-zero = the run failed, even if stdout has text
+  echo "Claude Code run failed; see result.json"
+  exit 1
+fi
+```
+
+```jsonc
+// settings.json (sketch): least-privilege permissions + a deterministic hook.
+{
+  "permissions": {
+    "allow": ["Read", "Edit"],           // narrow, not blanket access
+    "deny": ["Bash(rm:*)"]                // block destructive commands
+  },
+  "hooks": {
+    "PostToolUse": [
+      { "matcher": "Edit|Write", "command": "npm run lint" }   // fires deterministically
+    ]
+  }
+}
+```
+
+## Mental Model
+
+Configuration is **layered like CSS**: broad files (enterprise, user) set defaults,
+and the closest file (this repo, this subdirectory) wins on conflict. Within a
+project, ask **"who pulls the trigger?"** — auto-loaded context (`CLAUDE.md`,
+Rules), the *model* when a task matches (Skills, delegated Agents), *you* on demand
+(Commands), or *an event* no matter what the model wants (Hooks). Hooks are the only
+mechanism that is **not** at the model's discretion, which is exactly why they're
+the answer to "how do I *guarantee* this check runs."
+
+## Common Traps
+
+<Callout type="trap" title="Treating Skills and Commands as the same thing">
+**Trap:** "Skills and slash commands are both reusable, so they're interchangeable."
+**Skills are model-invoked** when a task matches; **Commands are user-invoked** by
+typing `/name`. The trigger is the distinction the exam tests.
+</Callout>
+
+<Callout type="trap" title="Relying on CLAUDE.md to enforce a rule">
+**Trap:** Putting "always run the linter" in `CLAUDE.md` and assuming it's
+guaranteed. Prose context is guidance the model *may* follow. To **guarantee** a
+check, use a **Hook** (deterministic) — not instructions.
+</Callout>
+
+<Callout type="trap" title="Headless success = zero exit only">
+**Trap:** Assuming a headless run "worked" because it printed output. Branch on the
+**exit code** — non-zero means failure even with text on stdout.
+</Callout>
+
+<Callout type="trap" title="Broad permissions by default">
+**Trap:** Granting Claude Code blanket tool/filesystem access. `settings.json`
+should be **least privilege** — allow only the tools/paths the task needs and deny
+destructive commands.
+</Callout>
+
+## Exam Tips
+
+- Know the **six mechanisms and their triggers** cold (see the table) — most D3
+  questions are "which one fits this job?"
+- `CLAUDE.md` is **hierarchical**; the more specific file layers on top.
+- Headless mode is for **CI/scripts** and signals via **exit code**.
+- Use **Hooks** for anything that must run *deterministically*; use **permissions**
+  in `settings.json` for least privilege.
+
+## Scenario Challenges
+
+<RevealAnswer title="Scenario: guarantee tests run after edits" prompt="Your team wants the test suite to run automatically every time Claude Code edits a file, with no reliance on the model remembering. Which mechanism, and where?">
+A **Hook** declared in `settings.json` — e.g. a `PostToolUse` hook matching
+edit/write actions that runs your test command. Hooks fire **deterministically** on
+the event, so the check does not depend on the model choosing to run it. Putting the
+instruction in `CLAUDE.md` would only be a suggestion the model might skip.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario: user shortcut vs auto capability" prompt="You want a '/review' step your team runs on demand, and separately a capability the agent should apply itself whenever it writes a migration. Which mechanisms?">
+`/review` is a **Command** — user-invoked by typing it. The
+"apply-whenever-it-writes-a-migration" capability is a **Skill** — model-invoked when
+the task matches. Same goal (reuse) but opposite triggers; picking the wrong one is
+the classic D3 mistake.
+</RevealAnswer>
+
+<RevealAnswer title="Scenario: keep a noisy sub-task from polluting context" prompt="A large refactor needs a deep, exploratory search that would flood the main session with irrelevant output. What Claude Code mechanism helps, and why?">
+Delegate to a **subagent (Agent)**. It runs with its **own context window** and
+returns only a **distilled result**, so the manager's context stays clean — the same
+context-isolation principle behind multi-agent orchestration. This prevents the
+context bloat that degrades reliability over a long session.
+</RevealAnswer>
