@@ -12,8 +12,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "pretypecheck": "node scripts/build-search-index.mjs",
     "typecheck": "tsc --noEmit",
     "validate:content": "bun scripts/validate-content.ts",
+    "pretest": "node scripts/build-search-index.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "bun run typecheck && bun run lint && bun run validate:content && bun run test"
