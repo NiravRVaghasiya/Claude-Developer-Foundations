@@ -3,6 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AppShell } from "@/components/AppShell";
 import { getTopicsByDomain } from "@/lib/content";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "CCDV-F Study — Claude Certified Developer: Foundations",
@@ -25,6 +26,7 @@ export default function RootLayout({
         <ThemeProvider>
           <AppShell groups={groups}>{children}</AppShell>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
